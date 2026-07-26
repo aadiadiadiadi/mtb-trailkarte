@@ -1,4 +1,4 @@
-const CACHE='mtb-trails-v5';
+const CACHE='mtb-trails-v6';
 const APP_FILES=[
   "./",
   "./index.html",

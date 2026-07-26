@@ -1,37 +1,7 @@
-# MTB Trailkarte
-
-Statische, installierbare MTB-Web-App für GitHub Pages.
-
-## Dateien
-
-Alle Dateien müssen im Hauptverzeichnis des GitHub-Repositories liegen:
-
-- index.html
-- trails-01.geojson bis trails-10.geojson
-- manifest.webmanifest
-- service-worker.js
-- icon-192.svg
-- icon-512.svg
-- .nojekyll
-
-Die zehn Trail-Dateien gehören zusammen. Keine davon weglassen oder umbenennen.
-
-## GitHub Pages aktivieren
-
-1. Repository auf GitHub erstellen.
-2. Alle Dateien aus diesem Ordner hochladen.
-3. Repository öffnen: Settings > Pages.
-4. Unter Build and deployment:
-   - Source: Deploy from a branch
-   - Branch: main
-   - Folder: /(root)
-5. Save wählen.
-6. Nach kurzer Wartezeit erscheint die öffentliche Adresse.
-
-## Aktualisierung
-
-Bei Änderungen alle geänderten Dateien erneut hochladen. Nach einer Aktualisierung
-kann ein vollständiges Neuladen der Seite oder das Löschen des App-Caches nötig sein.
-
-
-Wichtig: Nicht die ZIP-Datei selbst hochladen, sondern zuerst entpacken und nur deren Inhalt hochladen.
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" rx="96" fill="#1f2937"/>
+<path d="M101 346l94-164 61 105 48-81 107 140H101z" fill="#ffffff"/>
+<circle cx="166" cy="374" r="48" fill="none" stroke="#ffffff" stroke-width="22"/>
+<circle cx="349" cy="374" r="48" fill="none" stroke="#ffffff" stroke-width="22"/>
+<path d="M166 374l58-92h66l59 92M224 282l-24-48h48" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,81 @@
+name: OSM-Traildaten aktualisieren
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_dem:
+        description: "Maximale DEM-Abfragen (0 = alle fehlenden)"
+        required: false
+        default: "0"
+  schedule:
+    - cron: "30 20 * * 0"
+      timezone: "Europe/Zurich"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: osm-trail-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Werkzeuge installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool
+          python -m pip install --upgrade pip
+          pip install -r requirements-update.txt
+
+      - name: Schweizer OSM-Auszug laden
+        run: |
+          curl --fail --location --retry 4 \
+            --output /tmp/switzerland.osm.pbf \
+            https://download.geofabrik.de/europe/switzerland-latest.osm.pbf
+
+      - name: Trails und MTB-Routen filtern
+        run: |
+          osmium tags-filter /tmp/switzerland.osm.pbf \
+            w/highway=path,track \
+            w/mtb:scale w/mtb:scale:imba w/mtb:scale:uphill \
+            r/route=mtb \
+            --overwrite -o /tmp/mtb-filtered.osm.pbf
+
+          osmium export /tmp/mtb-filtered.osm.pbf \
+            --geometry-types=linestring \
+            --attributes=id,type \
+            --overwrite -f geojson -o /tmp/mtb-raw.geojson
+
+          osmium tags-filter /tmp/switzerland.osm.pbf \
+            r/route=mtb -R \
+            --overwrite -o /tmp/mtb-routes.osm.pbf
+
+          osmium cat /tmp/mtb-routes.osm.pbf \
+            -f opl --overwrite -o /tmp/mtb-routes.opl
+
+      - name: Incline übernehmen oder aus DEM berechnen
+        env:
+          MAX_DEM: ${{ github.event.inputs.max_dem || '0' }}
+        run: |
+          python scripts/prepare_trails.py /tmp/mtb-raw.geojson \
+            --routes-opl /tmp/mtb-routes.opl \
+            --output-dir . --chunks 10 --workers 6 --max-dem "$MAX_DEM"
+
+      - name: Änderungen veröffentlichen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add trails-*.geojson elevation-cache.json
+          if git diff --cached --quiet; then
+            echo "Keine Änderungen"
+          else
+            git commit -m "OSM-Traildaten automatisch aktualisiert"
+            git push
+          fi
