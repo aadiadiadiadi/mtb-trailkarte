@@ -162,15 +162,15 @@ const DEFAULT_SETTINGS={
   priority:["mtb:scale","mtb:scale:imba","mtb:scale:uphill"],
   enabled:{"mtb:scale":true,"mtb:scale:imba":true,"mtb:scale:uphill":true},
   maxDifficulty:"all",
-  showUnrated:true,
-  showRoutes:true,
+  showUnrated:false,
+  showRoutes:false,
   highContrast:true,
   followLocation:false
 };
 let settings=Object.assign({},DEFAULT_SETTINGS,JSON.parse(localStorage.getItem("mtbSettings")||"{}"));
 settings.enabled=Object.assign({},DEFAULT_SETTINGS.enabled,settings.enabled||{});
-if(typeof settings.showUnrated!=="boolean") settings.showUnrated=true;
-if(typeof settings.showRoutes!=="boolean") settings.showRoutes=true;
+if(typeof settings.showUnrated!=="boolean") settings.showUnrated=false;
+if(typeof settings.showRoutes!=="boolean") settings.showRoutes=false;
 
 const map=L.map("map",{zoomControl:false,preferCanvas:true,rotate:true,touchRotate:true,bearing:0});
 L.control.zoom({position:"bottomright"}).addTo(map);
@@ -199,7 +199,7 @@ function colorFor(p){
   return TAGS[tag].colors[v]||"#6b7280";
 }
 function isMtbRoute(p){
-  return p.route==="mtb" || p.type==="route" || String(p["@id"]||"").startsWith("relation/");
+  return p.route === "mtb";
 }
 function isRated(p){
   return activeTagFor(p)!==null;
