@@ -8,12 +8,30 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
 <style>
-:root{--panel:#fff;--text:#111827;--muted:#6b7280;--accent:#2563eb;--shadow:0 2px 14px rgba(0,0,0,.22)}
+:root{
+  --panel:#fff;
+  --panel-2:#f3f4f6;
+  --text:#111827;
+  --muted:#6b7280;
+  --accent:#2563eb;
+  --border:#e5e7eb;
+  --map-bg:#ddd;
+  --shadow:0 2px 14px rgba(0,0,0,.22)
+}
+html[data-theme="dark"]{
+  --panel:#111827;
+  --panel-2:#1f2937;
+  --text:#f9fafb;
+  --muted:#9ca3af;
+  --border:#374151;
+  --map-bg:#0f172a;
+  --shadow:0 2px 18px rgba(0,0,0,.5)
+}
 *{box-sizing:border-box}
 html,body,#map{height:100%;margin:0}
 body{font:15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);overflow:hidden}
 button,input,select{font:inherit}
-#map{background:#ddd}
+#map{background:var(--map-bg)}
 .control{
   background:var(--panel); border:0; border-radius:12px; box-shadow:var(--shadow);
   min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center;
@@ -29,35 +47,54 @@ button,input,select{font:inherit}
 .search input{width:100%;border:0;outline:0;background:transparent}
 .basemap{position:fixed;right:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:1000;padding:6px;gap:6px}
 .basemap button{border:0;background:transparent;padding:8px 10px;border-radius:9px;cursor:pointer}
-.basemap button.active{background:#e5e7eb;font-weight:700}
+.basemap button.active{background:var(--panel-2);font-weight:700}
 .fabstack{position:fixed;right:10px;top:74px;z-index:1000;display:flex;flex-direction:column;gap:8px}
 .legend{position:fixed;left:10px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:1000;max-width:min(310px,calc(100vw - 86px));padding:10px}
 .legend.hidden .legend-body{display:none}
 .legend-head{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:700}
 .legend-row{display:flex;align-items:center;gap:8px;margin-top:6px}
 .swatch{width:26px;height:5px;border-radius:4px;display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
-.drawer{position:fixed;z-index:2000;top:0;right:0;height:100%;width:min(390px,92vw);background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.25);padding:18px;overflow:auto;transform:translateX(105%);transition:.22s}
+.drawer{position:fixed;z-index:2000;top:0;right:0;height:100%;width:min(390px,92vw);background:var(--panel);box-shadow:-4px 0 20px rgba(0,0,0,.25);padding:18px;overflow:auto;transform:translateX(105%);transition:.22s}
 .drawer.open{transform:translateX(0)}
 .drawer h2{margin:0 0 16px}
-.section{border-top:1px solid #e5e7eb;padding:14px 0}
+.section{border-top:1px solid var(--border);padding:14px 0}
 .section:first-of-type{border-top:0}
 .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}
 .priority-list{display:flex;flex-direction:column;gap:8px}
-.priority-item{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:9px;border:1px solid #ddd;border-radius:10px}
-.priority-item button,.priority-item a{border:0;background:#eee;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:inherit;font-weight:700}
-.drawer-actions{display:flex;gap:8px;position:sticky;bottom:0;background:#fff;padding-top:12px}
+.priority-item{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:9px;border:1px solid var(--border);border-radius:10px}
+.priority-item button,.priority-item a{border:0;background:var(--panel-2);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:inherit;font-weight:700}
+.drawer-actions{display:flex;gap:8px;position:sticky;bottom:0;background:var(--panel);padding-top:12px}
 .drawer-actions button{flex:1;padding:11px;border:0;border-radius:10px}
 .primary{background:var(--accent);color:#fff}
-.secondary{background:#e5e7eb}
-.sheet{position:fixed;z-index:1800;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);padding:18px 18px calc(18px + env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s;max-height:55vh;overflow:auto}
+.secondary{background:var(--panel-2);color:var(--text)}
+.sheet{position:fixed;z-index:1800;left:0;right:0;bottom:0;background:var(--panel);border-radius:18px 18px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);padding:18px 18px calc(18px + env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s;max-height:55vh;overflow:auto}
 .sheet.open{transform:translateY(0)}
 .sheet h3{margin:0 0 8px}
 .sheet-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}
 .pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2ff;margin:2px 4px 2px 0}
 .notice{position:fixed;left:50%;top:78px;transform:translateX(-50%);z-index:2500;background:#111827;color:white;padding:10px 14px;border-radius:10px;box-shadow:var(--shadow);display:none;max-width:90vw}
-.search-results{position:fixed;top:64px;left:10px;right:110px;z-index:1700;background:#fff;box-shadow:var(--shadow);border-radius:12px;max-height:45vh;overflow:auto;display:none}
-.search-results button{display:block;width:100%;text-align:left;padding:11px;border:0;border-bottom:1px solid #eee;background:#fff}
+.search-results{position:fixed;top:64px;left:10px;right:110px;z-index:1700;background:var(--panel);box-shadow:var(--shadow);border-radius:12px;max-height:45vh;overflow:auto;display:none}
+.search-results button{display:block;width:100%;text-align:left;padding:11px;border:0;border-bottom:1px solid var(--border);background:var(--panel);color:var(--text)}
 .small{font-size:12px;color:var(--muted)}
+.heading-marker{position:relative;width:34px;height:34px}
+.heading-marker .heading-arrow{
+  position:absolute;left:8px;top:-8px;width:18px;height:22px;
+  background:#2563eb;clip-path:polygon(50% 0,100% 100%,50% 75%,0 100%);
+  transform-origin:50% 24px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))
+}
+.heading-marker .heading-dot{
+  position:absolute;left:8px;top:8px;width:18px;height:18px;border-radius:50%;
+  background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)
+}
+html[data-theme="dark"] .leaflet-control-zoom a{
+  background:var(--panel);color:var(--text);border-color:var(--border)
+}
+html[data-theme="dark"] .leaflet-popup-content-wrapper,
+html[data-theme="dark"] .leaflet-popup-tip{
+  background:var(--panel);color:var(--text)
+}
+select,input,button{color:var(--text)}
+select,input{background:var(--panel);border-color:var(--border)}
 @media (max-width:560px){.legend{font-size:13px}.basemap{bottom:calc(70px + env(safe-area-inset-bottom))}}
 </style>
 </head>
@@ -109,12 +146,20 @@ button,input,select{font:inherit}
     <div class="row"><label for="showRoutes">MTB-Routen anzeigen</label><input id="showRoutes" type="checkbox"></div>
     <div class="row"><label for="highContrast">Hoher Kontrast</label><input id="highContrast" type="checkbox"></div>
     <div class="row"><label for="followLocation">Standort folgen</label><input id="followLocation" type="checkbox"></div>
+    <div class="row"><label for="themeMode">Darstellung</label>
+      <select id="themeMode">
+        <option value="system">System</option>
+        <option value="light">Hell</option>
+        <option value="dark">Dunkel</option>
+      </select>
+    </div>
   </div>
 
   <div class="section">
     <strong>Daten</strong>
     <div id="dataStatus" class="small">Lade Daten…</div>
-    <button id="refreshBtn" class="secondary" style="margin-top:8px;padding:10px;border:0;border-radius:10px">OSM-Daten neu laden</button>
+    <div id="metaStatus" class="small" style="margin-top:8px"></div>
+    <button id="refreshBtn" class="secondary" style="margin-top:8px;padding:10px;border:0;border-radius:10px">Kartendaten neu laden</button>
   </div>
 
   <div class="drawer-actions">
@@ -165,14 +210,28 @@ const DEFAULT_SETTINGS={
   showUnrated:false,
   showRoutes:false,
   highContrast:true,
-  followLocation:false
+  followLocation:false,
+  theme:"system"
 };
 let settings=Object.assign({},DEFAULT_SETTINGS,JSON.parse(localStorage.getItem("mtbSettings")||"{}"));
 settings.enabled=Object.assign({},DEFAULT_SETTINGS.enabled,settings.enabled||{});
 if(typeof settings.showUnrated!=="boolean") settings.showUnrated=false;
 if(typeof settings.showRoutes!=="boolean") settings.showRoutes=false;
 
-const map=L.map("map",{zoomControl:false,preferCanvas:true,rotate:true,touchRotate:true,bearing:0});
+
+function applyTheme(mode){
+  const resolved=mode==="system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")
+    : mode;
+  document.documentElement.dataset.theme=resolved;
+}
+applyTheme(settings.theme||"system");
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()=>{
+  if((settings.theme||"system")==="system") applyTheme("system");
+});
+
+const canvasRenderer=L.canvas({padding:0.35,tolerance:5});
+const map=L.map("map",{zoomControl:false,preferCanvas:true,renderer:canvasRenderer,rotate:true,touchRotate:true,bearing:0});
 L.control.zoom({position:"bottomright"}).addTo(map);
 const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap-Mitwirkende"});
 const aerial=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Tiles © Esri, Maxar, Earthstar Geographics und weitere"});
@@ -180,6 +239,7 @@ osm.addTo(map);
 
 let geoData=null, trailLayer=null, outlineLayer=null, hitLayer=null, selectedLayer=null, searchIndex=[], gpxLayer=null;
 let locationMarker=null, accuracyCircle=null, watchId=null;
+let currentHeading=null, orientationListenerInstalled=false;
 
 function showNotice(msg,ms=3500){
   const n=document.getElementById("notice"); n.textContent=msg; n.style.display="block";
@@ -248,7 +308,8 @@ function styleOutline(f){
   return {color:"#ffffff",weight:settings.highContrast?7:5,opacity:passesFilter(p)?0.85:0};
 }
 function hitStyle(f){
-  return {color:"#000",weight:28,opacity:0};
+  const visible=passesFilter((f&&f.properties)||{});
+  return {color:"#000",weight:visible?24:0,opacity:0};
 }
 
 function popupHtml(p){
@@ -305,7 +366,7 @@ function rebuildLayers(fit=false){
   searchIndex=[];
   const layerById=new Map();
 
-  const layerFilter=f=>isLineFeature(f) && passesFilter(f.properties||{});
+  const layerFilter=f=>isLineFeature(f);
 
   outlineLayer=L.geoJSON(geoData,{
     filter:layerFilter,
@@ -328,6 +389,7 @@ function rebuildLayers(fit=false){
     style:hitStyle,
     onEachFeature:(f,l)=>{
       l.on("click",()=>{
+        if(!passesFilter(f.properties||{})) return;
         const visible=layerById.get(featureId(f));
         if(visible) selectFeature(visible,f);
       });
@@ -338,6 +400,14 @@ function rebuildLayers(fit=false){
   if(fit && trailLayer.getBounds().isValid()) map.fitBounds(trailLayer.getBounds(),{padding:[20,20]});
   renderLegend();
 }
+
+function updateLayerStyles(){
+  if(outlineLayer) outlineLayer.setStyle(styleOutline);
+  if(trailLayer) trailLayer.setStyle(styleMain);
+  if(hitLayer) hitLayer.setStyle(hitStyle);
+  renderLegend();
+}
+
 function renderLegend(){
   const body=document.getElementById("legendBody");
   let html="";
@@ -380,6 +450,27 @@ async function loadData(cacheBust=false){
     `${geoData.features?.length||0} OSM-Objekte geladen`;
 }
 
+async function loadMetadata(cacheBust=false){
+  const suffix=cacheBust ? `?t=${Date.now()}` : "";
+  const box=document.getElementById("metaStatus");
+  try{
+    const r=await fetch("data-meta.json"+suffix,{cache:cacheBust?"reload":"default"});
+    if(!r.ok) throw new Error();
+    const m=await r.json();
+    const updated=m.updated_at ? new Date(m.updated_at).toLocaleString("de-CH") : "–";
+    box.innerHTML=[
+      `App-Version: ${escapeHtml(m.app_version||"–")}`,
+      `Datenstand: ${escapeHtml(m.data_version||"–")}`,
+      `Aktualisiert: ${escapeHtml(updated)}`,
+      `Trails: ${Number(m.trail_count||0).toLocaleString("de-CH")}`,
+      `MTB-Routen: ${Number(m.route_count||0).toLocaleString("de-CH")}`,
+      `Quelle: ${escapeHtml(m.source||"OpenStreetMap")}`
+    ].join("<br>");
+  }catch{
+    box.textContent="Keine Metadaten verfügbar";
+  }
+}
+
 function switchBase(which){
   if(which==="osm"){map.removeLayer(aerial);osm.addTo(map);}
   else{map.removeLayer(osm);aerial.addTo(map);}
@@ -419,16 +510,54 @@ mapContainer.addEventListener("touchend",()=>{
 },{passive:true});
 
 
+function headingIcon(){
+  const rotation=Number.isFinite(currentHeading)?currentHeading:0;
+  return L.divIcon({
+    className:"",
+    iconSize:[34,34],
+    iconAnchor:[17,17],
+    html:`<div class="heading-marker"><div class="heading-arrow" style="transform:rotate(${rotation}deg)"></div><div class="heading-dot"></div></div>`
+  });
+}
+
+function updateHeadingMarker(){
+  if(locationMarker) locationMarker.setIcon(headingIcon());
+}
+
+function onOrientation(event){
+  let heading=null;
+  if(typeof event.webkitCompassHeading==="number") heading=event.webkitCompassHeading;
+  else if(typeof event.alpha==="number") heading=(360-event.alpha)%360;
+  if(heading!==null){
+    currentHeading=heading;
+    updateHeadingMarker();
+  }
+}
+
+async function enableOrientation(){
+  if(orientationListenerInstalled) return;
+  if(typeof DeviceOrientationEvent!=="undefined" && typeof DeviceOrientationEvent.requestPermission==="function"){
+    try{
+      const permission=await DeviceOrientationEvent.requestPermission();
+      if(permission!=="granted") return;
+    }catch{return;}
+  }
+  window.addEventListener("deviceorientationabsolute",onOrientation,true);
+  window.addEventListener("deviceorientation",onOrientation,true);
+  orientationListenerInstalled=true;
+}
+
 function updateLocation(pos){
   const ll=[pos.coords.latitude,pos.coords.longitude], acc=pos.coords.accuracy;
-  if(!locationMarker) locationMarker=L.circleMarker(ll,{radius:7,color:"#fff",weight:3,fillColor:"#2563eb",fillOpacity:1}).addTo(map);
+  if(!locationMarker) locationMarker=L.marker(ll,{icon:headingIcon(),interactive:false,zIndexOffset:1000}).addTo(map);
   else locationMarker.setLatLng(ll);
-  if(!accuracyCircle) accuracyCircle=L.circle(ll,{radius:acc,color:"#2563eb",weight:1,fillOpacity:.08}).addTo(map);
+  if(!accuracyCircle) accuracyCircle=L.circle(ll,{radius:acc,color:"#2563eb",weight:1,fillOpacity:.08,interactive:false}).addTo(map);
   else accuracyCircle.setLatLng(ll).setRadius(acc);
-  if(settings.followLocation) map.setView(ll,Math.max(map.getZoom(),16));
+  if(settings.followLocation) map.setView(ll,Math.max(map.getZoom(),16),{animate:false});
 }
-function locate(){
+async function locate(){
   if(!navigator.geolocation){showNotice("Standort wird von diesem Browser nicht unterstützt");return;}
+  await enableOrientation();
   navigator.geolocation.getCurrentPosition(
     p=>{updateLocation(p);map.setView([p.coords.latitude,p.coords.longitude],16);},
     e=>showNotice(e.code===1?"Standortberechtigung wurde verweigert":"Standort konnte nicht bestimmt werden"),
@@ -514,7 +643,7 @@ document.getElementById("searchInput").addEventListener("input",e=>{
   if(q.length<2){box.style.display="none";return;}
 
   const trails=searchIndex
-    .filter(x=>x.name.toLowerCase().includes(q))
+    .filter(x=>x.name.toLowerCase().includes(q) && passesFilter(x.feature.properties||{}))
     .slice(0,12)
     .map(x=>({kind:"trail",name:x.name,layer:x.layer,feature:x.feature}));
 
@@ -559,6 +688,7 @@ document.getElementById("settingsBtn").onclick=()=>{
   document.getElementById("showRoutes").checked=settings.showRoutes;
   document.getElementById("highContrast").checked=settings.highContrast;
   document.getElementById("followLocation").checked=settings.followLocation;
+  document.getElementById("themeMode").value=settings.theme||"system";
   document.getElementById("drawer").classList.add("open");
 };
 document.getElementById("closeSettings").onclick=()=>document.getElementById("drawer").classList.remove("open");
@@ -568,11 +698,15 @@ document.getElementById("saveSettings").onclick=()=>{
   settings.showRoutes=document.getElementById("showRoutes").checked;
   settings.highContrast=document.getElementById("highContrast").checked;
   settings.followLocation=document.getElementById("followLocation").checked;
+  settings.theme=document.getElementById("themeMode").value;
+  applyTheme(settings.theme);
   localStorage.setItem("mtbSettings",JSON.stringify(settings));
-  rebuildLayers(false);
+  updateLayerStyles();
   document.getElementById("drawer").classList.remove("open");
 };
-document.getElementById("refreshBtn").onclick=()=>loadData(true).then(()=>showNotice("Daten neu geladen")).catch(e=>showNotice(e.message));
+document.getElementById("refreshBtn").onclick=()=>Promise.all([loadData(true),loadMetadata(true)])
+  .then(()=>showNotice("Kartendaten neu geladen"))
+  .catch(e=>showNotice(e.message));
 
 document.getElementById("legendHead").onclick=()=>{
   const l=document.getElementById("legend"); l.classList.toggle("hidden");
@@ -598,7 +732,7 @@ document.getElementById("gpxInput").onchange=e=>{
   fr.readAsText(file);
 };
 
-loadData().catch(e=>showNotice(e.message,8000));
+Promise.all([loadData(),loadMetadata()]).catch(e=>showNotice(e.message,8000));
 if("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
 </script>
 </body>
