@@ -199,7 +199,14 @@ function colorFor(p){
   return TAGS[tag].colors[v]||"#6b7280";
 }
 function isMtbRoute(p){
-  return p.route === "mtb";
+  const osmId = String(p["@id"] || p.id || "");
+  return (
+    p.route === "mtb" &&
+    (
+      p.type === "route" ||
+      osmId.startsWith("relation/")
+    )
+  );
 }
 function isRated(p){
   return activeTagFor(p)!==null;
