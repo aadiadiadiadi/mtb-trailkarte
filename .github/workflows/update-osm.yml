@@ -93,24 +93,23 @@ jobs:
             git commit -m "OSM-Traildaten automatisch aktualisiert"
             git push
           fi
+      - name: Pages-Dateien zusammenstellen
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          cp index.html _site/
+          cp manifest.webmanifest _site/
+          cp service-worker.js _site/
+          cp icon-192.svg _site/
+          cp icon-512.svg _site/
+          cp data-meta.json _site/
+          touch _site/.nojekyll
+          cp trails-*.geojson _site/
 
-- name: Pages-Dateien zusammenstellen
-  run: |
-    rm -rf _site
-    mkdir _site
-
-    cp index.html _site/
-    cp manifest.webmanifest _site/
-    cp service-worker.js _site/
-    cp icon-192.svg _site/
-    cp icon-512.svg _site/
-    cp data-meta.json _site/
-
-    # .nojekyll erzeugen (falls nicht vorhanden)
-    touch _site/.nojekyll
-
-    cp trails-*.geojson _site/
-
+      - name: GitHub-Pages-Artefakt hochladen
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
       - name: GitHub-Pages-Artefakt hochladen
         uses: actions/upload-pages-artifact@v4
         with:
