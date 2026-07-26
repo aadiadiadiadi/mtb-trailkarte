@@ -577,11 +577,27 @@ function haversine(a,b){
 document.getElementById("nearestBtn").onclick=()=>{
   if(!locationMarker){showNotice("Zuerst Standort bestimmen");locate();return;}
   const here=locationMarker.getLatLng(); let best=null;
+
   trailLayer.eachLayer(l=>{
-    const c=l.getBounds?.().getCenter?.(); if(!c) return;
-    const d=haversine(here,c); if(!best||d<best.d) best={l,d};
+    const p=l.feature?.properties||{};
+
+    // Nur aktuell sichtbare Daten berücksichtigen.
+    if(!passesFilter(p)) return;
+
+    const c=l.getBounds?.().getCenter?.();
+    if(!c) return;
+
+    const d=haversine(here,c);
+    if(!best||d<best.d) best={l,d};
   });
-  if(best){map.fitBounds(best.l.getBounds(),{maxZoom:17,padding:[40,40]});best.l.fire("click");showNotice(`Nächster Trail: ca. ${Math.round(best.d)} m`);}
+
+  if(best){
+    map.fitBounds(best.l.getBounds(),{maxZoom:17,padding:[40,40]});
+    selectFeature(best.l,best.l.feature);
+    showNotice(`Nächster angezeigter Trail: ca. ${Math.round(best.d)} m`);
+  }else{
+    showNotice("Kein angezeigter Trail gefunden");
+  }
 };
 
 let searchTimer=null;
