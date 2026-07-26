@@ -1,14 +1,598 @@
-{
-  "app_version": "2.0.0",
-  "data_version": "2026-07-26T17:01:52Z",
-  "updated_at": "2026-07-26T17:01:52Z",
-  "osm_data_timestamp": null,
-  "source": "OpenStreetMap + swisstopo Höhenprofil",
-  "trail_count": 47688,
-  "route_count": 1099,
-  "feature_count": 62766,
-  "incline_osm_count": 0,
-  "incline_dem_count": 0,
-  "incline_pending_count": 51900,
-  "coverage": "Schweiz; grenzüberschreitende Wege vollständig"
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f2937">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<title>MTB Trailkarte</title>
+<style>
+:root{--panel:#fff;--text:#111827;--muted:#6b7280;--accent:#2563eb;--shadow:0 2px 14px rgba(0,0,0,.22)}
+*{box-sizing:border-box}
+html,body,#map{height:100%;margin:0}
+body{font:15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);overflow:hidden}
+button,input,select{font:inherit}
+#map{background:#ddd}
+.control{
+  background:var(--panel); border:0; border-radius:12px; box-shadow:var(--shadow);
+  min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center;
 }
+.iconbtn{font-size:22px;cursor:pointer}
+.northbtn{font-weight:800;transition:transform .15s ease}
+.sheet-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sheet-title h3{margin:0}
+.sheet-close{border:0;background:#e5e7eb;border-radius:999px;width:36px;height:36px;font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
+.topbar{position:fixed;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;z-index:1000;display:flex;gap:8px;pointer-events:none}
+.topbar>*{pointer-events:auto}
+.search{flex:1;display:flex;padding:0 10px}
+.search input{width:100%;border:0;outline:0;background:transparent}
+.basemap{position:fixed;right:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:1000;padding:6px;gap:6px}
+.basemap button{border:0;background:transparent;padding:8px 10px;border-radius:9px;cursor:pointer}
+.basemap button.active{background:#e5e7eb;font-weight:700}
+.fabstack{position:fixed;right:10px;top:74px;z-index:1000;display:flex;flex-direction:column;gap:8px}
+.legend{position:fixed;left:10px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:1000;max-width:min(310px,calc(100vw - 86px));padding:10px}
+.legend.hidden .legend-body{display:none}
+.legend-head{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:700}
+.legend-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.swatch{width:26px;height:5px;border-radius:4px;display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.drawer{position:fixed;z-index:2000;top:0;right:0;height:100%;width:min(390px,92vw);background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.25);padding:18px;overflow:auto;transform:translateX(105%);transition:.22s}
+.drawer.open{transform:translateX(0)}
+.drawer h2{margin:0 0 16px}
+.section{border-top:1px solid #e5e7eb;padding:14px 0}
+.section:first-of-type{border-top:0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}
+.priority-list{display:flex;flex-direction:column;gap:8px}
+.priority-item{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:9px;border:1px solid #ddd;border-radius:10px}
+.priority-item button,.priority-item a{border:0;background:#eee;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:inherit;font-weight:700}
+.drawer-actions{display:flex;gap:8px;position:sticky;bottom:0;background:#fff;padding-top:12px}
+.drawer-actions button{flex:1;padding:11px;border:0;border-radius:10px}
+.primary{background:var(--accent);color:#fff}
+.secondary{background:#e5e7eb}
+.sheet{position:fixed;z-index:1800;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);padding:18px 18px calc(18px + env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s;max-height:55vh;overflow:auto}
+.sheet.open{transform:translateY(0)}
+.sheet h3{margin:0 0 8px}
+.sheet-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}
+.pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2ff;margin:2px 4px 2px 0}
+.notice{position:fixed;left:50%;top:78px;transform:translateX(-50%);z-index:2500;background:#111827;color:white;padding:10px 14px;border-radius:10px;box-shadow:var(--shadow);display:none;max-width:90vw}
+.search-results{position:fixed;top:64px;left:10px;right:110px;z-index:1700;background:#fff;box-shadow:var(--shadow);border-radius:12px;max-height:45vh;overflow:auto;display:none}
+.search-results button{display:block;width:100%;text-align:left;padding:11px;border:0;border-bottom:1px solid #eee;background:#fff}
+.small{font-size:12px;color:var(--muted)}
+@media (max-width:560px){.legend{font-size:13px}.basemap{bottom:calc(70px + env(safe-area-inset-bottom))}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="topbar">
+  <div class="control search"><input id="searchInput" placeholder="Trail, Gemeinde oder Flurname suchen…" autocomplete="off"></div>
+  <button id="settingsBtn" class="control iconbtn" aria-label="Einstellungen">⚙</button>
+</div>
+<div id="searchResults" class="search-results"></div>
+
+<div class="fabstack">
+  <button id="locateBtn" class="control iconbtn" aria-label="Standort">◎</button>
+  <button id="northBtn" class="control iconbtn northbtn" aria-label="Nach Norden ausrichten" title="Nach Norden ausrichten">↑</button>
+  <button id="nearestBtn" class="control iconbtn" aria-label="Nächster Trail">↝</button>
+  <button id="gpxBtn" class="control iconbtn" aria-label="GPX importieren">＋</button>
+  <input id="gpxInput" type="file" accept=".gpx,application/gpx+xml" hidden>
+</div>
+
+<div class="control basemap">
+  <button id="osmBtn" class="active">Karte</button>
+  <button id="aerialBtn">Luftbild</button>
+</div>
+
+<div id="legend" class="control legend hidden">
+  <div id="legendHead" class="legend-head"><span>Legende</span><span id="legendChevron">▸</span></div>
+  <div id="legendBody" class="legend-body"></div>
+</div>
+
+<div id="drawer" class="drawer">
+  <h2>MTB-Einstellungen</h2>
+
+  <div class="section">
+    <strong>Anzuzeigende Daten und Priorität</strong>
+    <div class="small">Der oberste aktive Eintrag bestimmt die Farbe, sofern der Tag vorhanden ist.</div>
+    <div id="priorityList" class="priority-list"></div>
+  </div>
+
+  <div class="section">
+    <div class="row"><label for="maxDifficulty">Maximale Schwierigkeit</label>
+      <select id="maxDifficulty">
+        <option value="all">Alle</option>
+        <option value="0">S0</option><option value="1">S1</option><option value="2">S2</option>
+        <option value="3">S3</option><option value="4">S4</option><option value="5">S5</option><option value="6">S6</option>
+      </select>
+    </div>
+    <div class="row"><label for="showUnrated">Unbewertete Trails anzeigen</label><input id="showUnrated" type="checkbox"></div>
+    <div class="row"><label for="showRoutes">MTB-Routen anzeigen</label><input id="showRoutes" type="checkbox"></div>
+    <div class="row"><label for="highContrast">Hoher Kontrast</label><input id="highContrast" type="checkbox"></div>
+    <div class="row"><label for="followLocation">Standort folgen</label><input id="followLocation" type="checkbox"></div>
+  </div>
+
+  <div class="section">
+    <strong>Daten</strong>
+    <div id="dataStatus" class="small">Lade Daten…</div>
+    <button id="refreshBtn" class="secondary" style="margin-top:8px;padding:10px;border:0;border-radius:10px">OSM-Daten neu laden</button>
+  </div>
+
+  <div class="drawer-actions">
+    <button id="closeSettings" class="secondary">Schliessen</button>
+    <button id="saveSettings" class="primary">Übernehmen</button>
+  </div>
+</div>
+
+<div id="sheet" class="sheet"></div>
+<div id="notice" class="notice"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.7/dist/leaflet-rotate-src.js"></script>
+<script>
+
+const TAG_DOCS={
+  "mtb:scale":"https://wiki.openstreetmap.org/wiki/DE:Key:mtb:scale?uselang=de#mtb:scale=0-6",
+  "mtb:scale:imba":"https://wiki.openstreetmap.org/wiki/DE:Key:mtb:scale:imba?uselang=de#Werte",
+  "mtb:scale:uphill":"https://wiki.openstreetmap.org/w/index.php?title=Key:mtb:scale&uselang=de#mtb:scale:uphill=0-5"
+};
+
+const TAGS={
+  "mtb:scale":{
+    label:"MTB-Trails",
+    prefix:"S",
+    colors:{"0":"#2ca25f","1":"#2b8cbe","2":"#f59e0b","3":"#ef4444","4":"#991b1b","5":"#111827","6":"#7e22ce"},
+    order:["0","1","2","3","4","5","6"]
+  },
+  "mtb:scale:imba":{
+    label:"IMBA",
+    prefix:"",
+    colors:{"0":"#22c55e","1":"#3b82f6","2":"#111827","3":"#111827","4":"#7e22ce"},
+    names:{"0":"Grün","1":"Blau","2":"Schwarz","3":"Doppelschwarz","4":"Extrem"},
+    order:["0","1","2","3","4"]
+  },
+  "mtb:scale:uphill":{
+    label:"Uphill",
+    prefix:"U",
+    colors:{"0":"#22c55e","1":"#84cc16","2":"#eab308","3":"#f97316","4":"#ef4444","5":"#111827"},
+    order:["0","1","2","3","4","5"]
+  }
+};
+
+const DEFAULT_SETTINGS={
+  priority:["mtb:scale","mtb:scale:imba","mtb:scale:uphill"],
+  enabled:{"mtb:scale":true,"mtb:scale:imba":true,"mtb:scale:uphill":true},
+  maxDifficulty:"all",
+  showUnrated:true,
+  showRoutes:true,
+  highContrast:true,
+  followLocation:false
+};
+let settings=Object.assign({},DEFAULT_SETTINGS,JSON.parse(localStorage.getItem("mtbSettings")||"{}"));
+settings.enabled=Object.assign({},DEFAULT_SETTINGS.enabled,settings.enabled||{});
+if(typeof settings.showUnrated!=="boolean") settings.showUnrated=true;
+if(typeof settings.showRoutes!=="boolean") settings.showRoutes=true;
+
+const map=L.map("map",{zoomControl:false,preferCanvas:true,rotate:true,touchRotate:true,bearing:0});
+L.control.zoom({position:"bottomright"}).addTo(map);
+const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap-Mitwirkende"});
+const aerial=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Tiles © Esri, Maxar, Earthstar Geographics und weitere"});
+osm.addTo(map);
+
+let geoData=null, trailLayer=null, outlineLayer=null, hitLayer=null, selectedLayer=null, searchIndex=[], gpxLayer=null;
+let locationMarker=null, accuracyCircle=null, watchId=null;
+
+function showNotice(msg,ms=3500){
+  const n=document.getElementById("notice"); n.textContent=msg; n.style.display="block";
+  clearTimeout(n._t); n._t=setTimeout(()=>n.style.display="none",ms);
+}
+function normScale(v){ if(v===undefined||v===null) return null; return String(v).trim().split(/[;,+-]/)[0]; }
+function activeTagFor(p){
+  for(const tag of settings.priority){
+    if(settings.enabled[tag] && p[tag]!==undefined && p[tag]!==null && String(p[tag]).trim()!=="") return tag;
+  }
+  return null;
+}
+function colorFor(p){
+  const tag=activeTagFor(p);
+  if(!tag) return "#9ca3af";
+  const v=normScale(p[tag]);
+  return TAGS[tag].colors[v]||"#6b7280";
+}
+function isMtbRoute(p){
+  return p.route==="mtb" || p.type==="route" || String(p["@id"]||"").startsWith("relation/");
+}
+function isRated(p){
+  return activeTagFor(p)!==null;
+}
+function isLineFeature(f){
+  return f && f.geometry && ["LineString","MultiLineString"].includes(f.geometry.type);
+}
+function passesFilter(p){
+  if(isMtbRoute(p) && !settings.showRoutes) return false;
+  if(!isMtbRoute(p) && !isRated(p) && !settings.showUnrated) return false;
+
+  if(settings.maxDifficulty==="all") return true;
+  const tag=activeTagFor(p);
+  if(!tag) return true;
+  const v=parseInt(normScale(p[tag]),10);
+  return Number.isNaN(v) || v<=parseInt(settings.maxDifficulty,10);
+}
+function styleMain(f){
+  const p=f.properties||{};
+  if(isMtbRoute(p)){
+    return {
+      color:"#6b7280",
+      weight:settings.highContrast?3:2,
+      opacity:passesFilter(p)?0.8:0,
+      dashArray:"7 7"
+    };
+  }
+  return {
+    color:colorFor(p),
+    weight:settings.highContrast?4:3,
+    opacity:passesFilter(p)?0.95:0
+  };
+}
+function styleOutline(f){
+  const p=f.properties||{};
+  if(isMtbRoute(p)){
+    return {color:"#ffffff",weight:settings.highContrast?6:4,opacity:passesFilter(p)?0.65:0,dashArray:"7 7"};
+  }
+  return {color:"#ffffff",weight:settings.highContrast?7:5,opacity:passesFilter(p)?0.85:0};
+}
+function hitStyle(f){
+  return {color:"#000",weight:28,opacity:0};
+}
+
+function popupHtml(p){
+  const name=p.name||p["mtb:name"]||"Unbenannter Trail";
+  const tags=["mtb:scale","mtb:scale:imba","mtb:scale:uphill"];
+  let rows=`<div class="sheet-title"><h3>${escapeHtml(name)}</h3><button id="sheetCloseBtn" class="sheet-close" aria-label="Details schliessen">×</button></div><div class="sheet-grid">`;
+  for(const t of tags){
+    rows+=`<div>${TAGS[t].label}</div><div>${p[t]!==undefined?escapeHtml(String(p[t])):"–"}</div>`;
+  }
+  rows+=`<div>Oberfläche</div><div>${escapeHtml(p.surface||"–")}</div>`;
+  rows+=`<div>Tracktype</div><div>${escapeHtml(p.tracktype||"–")}</div>`;
+  rows+=`<div>Steigung</div><div>${escapeHtml(p.incline||"–")}</div>`;
+  rows+=`</div><p><button id="favBtn" class="primary" style="border:0;border-radius:10px;padding:10px">★ Favorit</button></p>`;
+  return rows;
+}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
+
+function closeSheet(){
+  document.getElementById("sheet").classList.remove("open");
+  if(selectedLayer && trailLayer){
+    trailLayer.resetStyle(selectedLayer);
+    selectedLayer=null;
+  }
+}
+function selectFeature(layer,f){
+  if(selectedLayer) trailLayer.resetStyle(selectedLayer);
+  selectedLayer=layer;
+  layer.setStyle({weight:8,color:"#fde047",opacity:1});
+  layer.bringToFront();
+  const sheet=document.getElementById("sheet");
+  sheet.innerHTML=popupHtml(f.properties||{});
+  sheet.classList.add("open");
+  setTimeout(()=>{
+    const btn=document.getElementById("favBtn");
+    if(btn) btn.onclick=()=>toggleFavorite(f);
+    const closeBtn=document.getElementById("sheetCloseBtn");
+    if(closeBtn) closeBtn.onclick=closeSheet;
+  },0);
+}
+function featureId(f){return (f.id||"")+"|"+((f.properties||{}).name||"")+"|"+JSON.stringify(f.geometry.coordinates[0]||[]).slice(0,80)}
+function toggleFavorite(f){
+  const favs=JSON.parse(localStorage.getItem("mtbFavorites")||"[]");
+  const id=featureId(f), idx=favs.findIndex(x=>x.id===id);
+  if(idx>=0){favs.splice(idx,1);showNotice("Favorit entfernt");}
+  else{favs.push({id,name:(f.properties||{}).name||"Unbenannter Trail",properties:f.properties});showNotice("Favorit gespeichert");}
+  localStorage.setItem("mtbFavorites",JSON.stringify(favs));
+}
+
+function rebuildLayers(fit=false){
+  if(trailLayer) map.removeLayer(trailLayer);
+  if(outlineLayer) map.removeLayer(outlineLayer);
+  if(hitLayer) map.removeLayer(hitLayer);
+
+  searchIndex=[];
+  const layerById=new Map();
+
+  const layerFilter=f=>isLineFeature(f) && passesFilter(f.properties||{});
+
+  outlineLayer=L.geoJSON(geoData,{
+    filter:layerFilter,
+    style:styleOutline,
+    interactive:false
+  }).addTo(map);
+
+  trailLayer=L.geoJSON(geoData,{
+    filter:layerFilter,
+    style:styleMain,
+    onEachFeature:(f,l)=>{
+      layerById.set(featureId(f),l);
+      const p=f.properties||{}, name=p.name||p["mtb:name"];
+      if(name) searchIndex.push({name:String(name),layer:l,feature:f});
+    }
+  }).addTo(map);
+
+  hitLayer=L.geoJSON(geoData,{
+    filter:layerFilter,
+    style:hitStyle,
+    onEachFeature:(f,l)=>{
+      l.on("click",()=>{
+        const visible=layerById.get(featureId(f));
+        if(visible) selectFeature(visible,f);
+      });
+    }
+  }).addTo(map);
+
+  searchIndex=[...new Map(searchIndex.map(x=>[x.name+"|"+featureId(x.feature),x])).values()];
+  if(fit && trailLayer.getBounds().isValid()) map.fitBounds(trailLayer.getBounds(),{padding:[20,20]});
+  renderLegend();
+}
+function renderLegend(){
+  const body=document.getElementById("legendBody");
+  let html="";
+  for(const tag of settings.priority){
+    if(!settings.enabled[tag]) continue;
+    const cfg=TAGS[tag];
+    html+=`<div style="margin-top:8px"><strong>${cfg.label}</strong></div>`;
+    for(const v of cfg.order){
+      const label=cfg.names?.[v]||`${cfg.prefix}${v}`;
+      html+=`<div class="legend-row"><span class="swatch" style="background:${cfg.colors[v]}"></span><span>${label}</span></div>`;
+    }
+  }
+  if(settings.showUnrated){
+    html+=`<div style="margin-top:8px"><strong>Weitere Trails</strong></div>
+      <div class="legend-row"><span class="swatch" style="background:#9ca3af"></span><span>Unbewertet</span></div>`;
+  }
+  if(settings.showRoutes){
+    html+=`<div class="legend-row"><span class="swatch" style="background:repeating-linear-gradient(90deg,#6b7280 0 8px,transparent 8px 14px)"></span><span>MTB-Route</span></div>`;
+  }
+  if(!html) html='<div class="small">Keine Datenebene aktiviert</div>';
+  body.innerHTML=html;
+}
+
+const TRAIL_FILES=["trails-01.geojson","trails-02.geojson","trails-03.geojson","trails-04.geojson","trails-05.geojson","trails-06.geojson","trails-07.geojson","trails-08.geojson","trails-09.geojson","trails-10.geojson"];
+
+async function loadData(cacheBust=false){
+  const suffix=cacheBust ? `?t=${Date.now()}` : "";
+  const collections=await Promise.all(TRAIL_FILES.map(async file=>{
+    const r=await fetch(file+suffix,{cache:cacheBust?"reload":"default"});
+    if(!r.ok) throw new Error(`${file} konnte nicht geladen werden`);
+    return r.json();
+  }));
+  geoData={
+    type:"FeatureCollection",
+    features:collections.flatMap(c=>c.features||[])
+  };
+  searchIndex=[];
+  rebuildLayers(!map._loaded);
+  document.getElementById("dataStatus").textContent=
+    `${geoData.features?.length||0} OSM-Objekte geladen`;
+}
+
+function switchBase(which){
+  if(which==="osm"){map.removeLayer(aerial);osm.addTo(map);}
+  else{map.removeLayer(osm);aerial.addTo(map);}
+  document.getElementById("osmBtn").classList.toggle("active",which==="osm");
+  document.getElementById("aerialBtn").classList.toggle("active",which==="aerial");
+}
+document.getElementById("osmBtn").onclick=()=>switchBase("osm");
+document.getElementById("aerialBtn").onclick=()=>switchBase("aerial");
+document.getElementById("northBtn").onclick=()=>{
+  if(typeof map.setBearing==="function") map.setBearing(0);
+};
+function updateNorthArrow(){
+  const bearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
+  document.getElementById("northBtn").style.transform=`rotate(${bearing}deg)`;
+}
+map.on("rotate",updateNorthArrow);
+updateNorthArrow();
+
+/* Kleine unbeabsichtigte Zwei-Finger-Drehungen werden nach dem Loslassen
+   auf die Ausgangsausrichtung zurückgesetzt. Bewusste Drehungen ab 12° bleiben. */
+let gestureStartBearing=null;
+const mapContainer=map.getContainer();
+mapContainer.addEventListener("touchstart",e=>{
+  if(e.touches.length===2 && typeof map.getBearing==="function"){
+    gestureStartBearing=map.getBearing();
+  }
+},{passive:true});
+mapContainer.addEventListener("touchend",()=>{
+  if(gestureStartBearing===null || typeof map.getBearing!=="function") return;
+  const current=map.getBearing();
+  let delta=Math.abs(current-gestureStartBearing)%360;
+  if(delta>180) delta=360-delta;
+  if(delta<12 && typeof map.setBearing==="function"){
+    map.setBearing(gestureStartBearing);
+  }
+  gestureStartBearing=null;
+},{passive:true});
+
+
+function updateLocation(pos){
+  const ll=[pos.coords.latitude,pos.coords.longitude], acc=pos.coords.accuracy;
+  if(!locationMarker) locationMarker=L.circleMarker(ll,{radius:7,color:"#fff",weight:3,fillColor:"#2563eb",fillOpacity:1}).addTo(map);
+  else locationMarker.setLatLng(ll);
+  if(!accuracyCircle) accuracyCircle=L.circle(ll,{radius:acc,color:"#2563eb",weight:1,fillOpacity:.08}).addTo(map);
+  else accuracyCircle.setLatLng(ll).setRadius(acc);
+  if(settings.followLocation) map.setView(ll,Math.max(map.getZoom(),16));
+}
+function locate(){
+  if(!navigator.geolocation){showNotice("Standort wird von diesem Browser nicht unterstützt");return;}
+  navigator.geolocation.getCurrentPosition(
+    p=>{updateLocation(p);map.setView([p.coords.latitude,p.coords.longitude],16);},
+    e=>showNotice(e.code===1?"Standortberechtigung wurde verweigert":"Standort konnte nicht bestimmt werden"),
+    {enableHighAccuracy:true,timeout:15000,maximumAge:5000}
+  );
+  if(watchId===null) watchId=navigator.geolocation.watchPosition(updateLocation,()=>{},{
+    enableHighAccuracy:true,timeout:20000,maximumAge:3000
+  });
+}
+document.getElementById("locateBtn").onclick=locate;
+
+function haversine(a,b){
+  const R=6371000, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+document.getElementById("nearestBtn").onclick=()=>{
+  if(!locationMarker){showNotice("Zuerst Standort bestimmen");locate();return;}
+  const here=locationMarker.getLatLng(); let best=null;
+  trailLayer.eachLayer(l=>{
+    const c=l.getBounds?.().getCenter?.(); if(!c) return;
+    const d=haversine(here,c); if(!best||d<best.d) best={l,d};
+  });
+  if(best){map.fitBounds(best.l.getBounds(),{maxZoom:17,padding:[40,40]});best.l.fire("click");showNotice(`Nächster Trail: ca. ${Math.round(best.d)} m`);}
+};
+
+let searchTimer=null;
+let placeMarker=null;
+
+function showSearchResults(items){
+  const box=document.getElementById("searchResults");
+  box.innerHTML=items.map((x,i)=>{
+    const kind=x.kind==="trail" ? "Trail" : (x.typeLabel||"Ort");
+    return `<button data-i="${i}"><strong>${escapeHtml(x.name)}</strong><br><span class="small">${escapeHtml(kind)}</span></button>`;
+  }).join("");
+  box.style.display=items.length?"block":"none";
+  [...box.querySelectorAll("button")].forEach((b,i)=>b.onclick=()=>{
+    const x=items[i];
+    if(x.kind==="trail"){
+      map.fitBounds(x.layer.getBounds(),{maxZoom:17,padding:[40,40]});
+      x.layer.fire("click");
+    }else{
+      closeSheet();
+      if(x.boundingbox && x.boundingbox.length===4){
+        map.fitBounds([[+x.boundingbox[0],+x.boundingbox[2]],[+x.boundingbox[1],+x.boundingbox[3]]],{padding:[35,35]});
+      }else{
+        map.setView([+x.lat,+x.lon],15);
+      }
+      if(placeMarker) map.removeLayer(placeMarker);
+      placeMarker=L.marker([+x.lat,+x.lon]).addTo(map).bindPopup(escapeHtml(x.name)).openPopup();
+    }
+    box.style.display="none";
+  });
+}
+
+async function searchPlaces(q){
+  const bounds=map.getBounds();
+  const viewbox=[bounds.getWest(),bounds.getNorth(),bounds.getEast(),bounds.getSouth()].join(",");
+  const url="https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&accept-language=de&q="
+    +encodeURIComponent(q)+"&viewbox="+encodeURIComponent(viewbox);
+  const r=await fetch(url,{headers:{"Accept":"application/json"}});
+  if(!r.ok) return [];
+  const results=await r.json();
+  return results.map(x=>({
+    kind:"place",
+    name:x.display_name,
+    lat:x.lat,
+    lon:x.lon,
+    boundingbox:x.boundingbox,
+    typeLabel:{
+      city:"Gemeinde/Stadt",town:"Gemeinde/Stadt",village:"Gemeinde/Dorf",
+      municipality:"Gemeinde",administrative:"Gemeinde/Gebiet",
+      locality:"Flurname",hamlet:"Weiler/Flurname",
+      peak:"Gipfel",mountain_pass:"Pass"
+    }[x.type] || x.type || "Ort"
+  }));
+}
+
+document.getElementById("searchInput").addEventListener("input",e=>{
+  clearTimeout(searchTimer);
+  const q=e.target.value.trim().toLowerCase();
+  const box=document.getElementById("searchResults");
+  if(q.length<2){box.style.display="none";return;}
+
+  const trails=searchIndex
+    .filter(x=>x.name.toLowerCase().includes(q))
+    .slice(0,12)
+    .map(x=>({kind:"trail",name:x.name,layer:x.layer,feature:x.feature}));
+
+  showSearchResults(trails);
+
+  if(q.length>=3){
+    searchTimer=setTimeout(async()=>{
+      try{
+        const places=await searchPlaces(q);
+        showSearchResults([...trails,...places].slice(0,20));
+      }catch{
+        showSearchResults(trails);
+      }
+    },650);
+  }
+});
+
+function renderPriority(){
+  const box=document.getElementById("priorityList");
+  box.innerHTML=settings.priority.map((tag,i)=>`
+    <div class="priority-item" data-tag="${tag}">
+      <input type="checkbox" ${settings.enabled[tag]?"checked":""}>
+      <span>${TAGS[tag].label}<br><span class="small">${tag}</span></span>
+      <a class="info-link" href="${TAG_DOCS[tag]}" target="_blank" rel="noopener noreferrer" aria-label="Dokumentation zu ${TAGS[tag].label}" title="OSM-Dokumentation öffnen">i</a>
+      <button data-dir="-1" ${i===0?"disabled":""}>↑</button>
+      <button data-dir="1" ${i===settings.priority.length-1?"disabled":""}>↓</button>
+    </div>`).join("");
+  box.querySelectorAll(".priority-item").forEach(row=>{
+    const tag=row.dataset.tag;
+    row.querySelector('input').onchange=e=>settings.enabled[tag]=e.target.checked;
+    row.querySelectorAll("button[data-dir]").forEach(btn=>btn.onclick=()=>{
+      const from=settings.priority.indexOf(tag), to=from+Number(btn.dataset.dir);
+      [settings.priority[from],settings.priority[to]]=[settings.priority[to],settings.priority[from]];
+      renderPriority();
+    });
+  });
+}
+document.getElementById("settingsBtn").onclick=()=>{
+  renderPriority();
+  document.getElementById("maxDifficulty").value=settings.maxDifficulty;
+  document.getElementById("showUnrated").checked=settings.showUnrated;
+  document.getElementById("showRoutes").checked=settings.showRoutes;
+  document.getElementById("highContrast").checked=settings.highContrast;
+  document.getElementById("followLocation").checked=settings.followLocation;
+  document.getElementById("drawer").classList.add("open");
+};
+document.getElementById("closeSettings").onclick=()=>document.getElementById("drawer").classList.remove("open");
+document.getElementById("saveSettings").onclick=()=>{
+  settings.maxDifficulty=document.getElementById("maxDifficulty").value;
+  settings.showUnrated=document.getElementById("showUnrated").checked;
+  settings.showRoutes=document.getElementById("showRoutes").checked;
+  settings.highContrast=document.getElementById("highContrast").checked;
+  settings.followLocation=document.getElementById("followLocation").checked;
+  localStorage.setItem("mtbSettings",JSON.stringify(settings));
+  rebuildLayers(false);
+  document.getElementById("drawer").classList.remove("open");
+};
+document.getElementById("refreshBtn").onclick=()=>loadData(true).then(()=>showNotice("Daten neu geladen")).catch(e=>showNotice(e.message));
+
+document.getElementById("legendHead").onclick=()=>{
+  const l=document.getElementById("legend"); l.classList.toggle("hidden");
+  document.getElementById("legendChevron").textContent=l.classList.contains("hidden")?"▸":"▾";
+};
+document.getElementById("sheet").addEventListener("click",e=>{if(e.target===e.currentTarget)closeSheet()});
+
+document.getElementById("gpxBtn").onclick=()=>document.getElementById("gpxInput").click();
+document.getElementById("gpxInput").onchange=e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const xml=new DOMParser().parseFromString(fr.result,"application/xml");
+      const pts=[...xml.querySelectorAll("trkpt,rtept")].map(n=>[+n.getAttribute("lat"),+n.getAttribute("lon")]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));
+      if(!pts.length) throw new Error();
+      if(gpxLayer) map.removeLayer(gpxLayer);
+      gpxLayer=L.polyline(pts,{color:"#fde047",weight:5}).addTo(map);
+      map.fitBounds(gpxLayer.getBounds(),{padding:[30,30]});
+      showNotice("GPX geladen");
+    }catch{showNotice("GPX konnte nicht gelesen werden");}
+  };
+  fr.readAsText(file);
+};
+
+loadData().catch(e=>showNotice(e.message,8000));
+if("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
+</script>
+</body>
+</html>
