@@ -1,120 +1,14 @@
-#!/usr/bin/env python3
-"""Prepare Switzerland MTB GeoJSON and enrich missing incline values with swisstopo DEM profiles."""
-from __future__ import annotations
-import argparse, concurrent.futures, hashlib, json, math, os, re, time
-from pathlib import Path
-from typing import Any
-import requests
-from pyproj import Transformer
-
-PROFILE_URL="https://api3.geo.admin.ch/rest/services/profile.json"
-TRANSFORM=Transformer.from_crs(4326,2056,always_xy=True)
-SESSION=requests.Session(); SESSION.headers.update({"User-Agent":"MTB-Trailkarte-GitHub-Action/1.0"})
-
-def lines(geom):
-    if not geom:return []
-    if geom.get("type")=="LineString":return [geom.get("coordinates",[])]
-    if geom.get("type")=="MultiLineString":return geom.get("coordinates",[])
-    return []
-
-def distance_m(coords):
-    total=0.0
-    for a,b in zip(coords,coords[1:]):
-        lat=(a[1]+b[1])*math.pi/360
-        dx=(b[0]-a[0])*111320*math.cos(lat);dy=(b[1]-a[1])*110540
-        total+=math.hypot(dx,dy)
-    return total
-
-def feature_key(f):
-    p=f.get("properties") or {}
-    base=str(p.get("@id") or f.get("id") or "")+json.dumps(f.get("geometry"),separators=(",",":"))
-    return hashlib.sha1(base.encode()).hexdigest()
-
-def sample_line(coords,max_vertices=80):
-    if len(coords)<=max_vertices:return coords
-    return [coords[round(i*(len(coords)-1)/(max_vertices-1))] for i in range(max_vertices)]
-
-def profile_for_feature(f):
-    candidates=[x for x in lines(f.get("geometry")) if len(x)>=2]
-    if not candidates:return None
-    coords=max(candidates,key=distance_m)
-    lv95=[list(TRANSFORM.transform(x,y)) for x,y,*_ in sample_line(coords)]
-    payload={"type":"LineString","coordinates":lv95}
-    for attempt in range(4):
-        try:
-            r=SESSION.post(PROFILE_URL,data={"geom":json.dumps(payload),"sr":"2056","nb_points":"80","distinct_points":"true"},timeout=45)
-            if r.status_code in (429,500,502,503,504):raise RuntimeError(str(r.status_code))
-            r.raise_for_status(); data=r.json()
-            vals=[]
-            for x in data:
-                alt=(x.get("alts") or {}).get("COMB")
-                if alt is not None: vals.append((float(x.get("dist",0)),float(alt)))
-            if len(vals)<2:return None
-            gain=loss=0.0; grades=[]
-            for (d1,h1),(d2,h2) in zip(vals,vals[1:]):
-                dd=d2-d1; dh=h2-h1
-                if dd>0.5:
-                    grades.append(100*dh/dd)
-                    if dh>0:gain+=dh
-                    else:loss-=dh
-            total=max(vals[-1][0]-vals[0][0],0.1)
-            signed=100*(vals[-1][1]-vals[0][1])/total
-            return {"incline":f"{signed:.1f}%","incline_avg_percent":round(signed,1),"incline_max_percent":round(max((abs(x) for x in grades),default=0),1),"elevation_gain_m":round(gain),"elevation_loss_m":round(loss),"incline_source":"DEM (swisstopo)"}
-        except Exception:
-            if attempt==3:return None
-            time.sleep(2**attempt)
-
-def normalize_properties(p):
-    p=dict(p or {})
-    tags=p.pop("tags",None)
-    if isinstance(tags,dict):
-        for k,v in tags.items():p.setdefault(k,v)
-    return p
-
-def main():
-    ap=argparse.ArgumentParser();ap.add_argument("input");ap.add_argument("--routes-opl");ap.add_argument("--output-dir",default=".");ap.add_argument("--chunks",type=int,default=10);ap.add_argument("--workers",type=int,default=6);ap.add_argument("--max-dem",type=int,default=0)
-    a=ap.parse_args(); out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
-    route_way_ids=set()
-    if a.routes_opl and Path(a.routes_opl).exists():
-        for line in Path(a.routes_opl).read_text(encoding="utf-8",errors="ignore").splitlines():
-            if line.startswith("r"):
-                route_way_ids.update(re.findall(r"(?:^|,)w(-?\d+)@", line.split(" M",1)[-1]))
-    raw=json.load(open(a.input,encoding="utf-8")); feats=[]
-    for f in raw.get("features",[]):
-        if f.get("geometry",{}).get("type") not in ("LineString","MultiLineString"):continue
-        f["properties"]=normalize_properties(f.get("properties"))
-        osm_id=str(f["properties"].get("@id") or "")
-        if osm_id in route_way_ids:f["properties"]["route"]="mtb"
-        feats.append(f)
-    cache_path=out/"elevation-cache.json";cache={}
-    if cache_path.exists():
-        try:cache=json.load(open(cache_path,encoding="utf-8"))
-        except Exception:pass
-    missing=[]
-    for f in feats:
-        p=f["properties"]
-        if str(p.get("incline","")).strip():p.setdefault("incline_source","OSM")
-        else:
-            k=feature_key(f)
-            if k in cache and cache[k]:p.update(cache[k])
-            else:missing.append((k,f))
-    if a.max_dem>0:missing=missing[:a.max_dem]
-    print(f"Features: {len(feats)}, DEM-Abfragen: {len(missing)}")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=a.workers) as ex:
-        futures={ex.submit(profile_for_feature,f):(k,f) for k,f in missing}
-        done=0
-        for fut in concurrent.futures.as_completed(futures):
-            k,f=futures[fut]; result=fut.result();cache[k]=result
-            if result:f["properties"].update(result)
-            done+=1
-            if done%100==0:
-                print(f"DEM {done}/{len(missing)}");cache_path.write_text(json.dumps(cache,separators=(",",":")),encoding="utf-8")
-    cache_path.write_text(json.dumps(cache,separators=(",",":")),encoding="utf-8")
-    # stable spatial-ish ordering and round-robin chunks
-    feats.sort(key=lambda f:str((f.get("properties") or {}).get("@id") or f.get("id") or ""))
-    updated=time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())
-    for i in range(a.chunks):
-        collection={"type":"FeatureCollection","metadata":{"updated_at":updated,"source":"OpenStreetMap + swisstopo DEM"},"features":feats[i::a.chunks]}
-        (out/f"trails-{i+1:02d}.geojson").write_text(json.dumps(collection,ensure_ascii=False,separators=(",",":")),encoding="utf-8")
-    print("Fertig")
-if __name__=="__main__":main()
+{
+  "app_version": "2.0.0",
+  "data_version": "2026-07-26T17:01:52Z",
+  "updated_at": "2026-07-26T17:01:52Z",
+  "osm_data_timestamp": null,
+  "source": "OpenStreetMap + swisstopo Höhenprofil",
+  "trail_count": 47688,
+  "route_count": 1099,
+  "feature_count": 62766,
+  "incline_osm_count": 0,
+  "incline_dem_count": 0,
+  "incline_pending_count": 51900,
+  "coverage": "Schweiz; grenzüberschreitende Wege vollständig"
+}
