@@ -1,14 +1,14 @@
 {
   "app_version": "2.0.0",
-  "data_version": "2026-07-26T18:53:29Z",
-  "updated_at": "2026-07-26T18:53:29Z",
+  "data_version": "2026-07-26T19:07:02Z",
+  "updated_at": "2026-07-26T19:07:02Z",
   "osm_data_timestamp": "2026-07-25T20:21:51Z",
   "source": "OpenStreetMap (Geofabrik Schweiz) + swisstopo Höhenprofil",
   "trail_count": 27915,
   "route_count": 29446,
   "feature_count": 53187,
   "incline_osm_count": 5304,
-  "incline_dem_count": 20,
-  "incline_pending_count": 47863,
+  "incline_dem_count": 40,
+  "incline_pending_count": 47843,
   "coverage": "Schweiz; grenzüberschreitende Wege vollständig"
 }
