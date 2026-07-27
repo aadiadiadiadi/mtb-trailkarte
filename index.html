@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.1.3">
+<meta name="app-version" content="2.1.4">
 <style>
 :root{
   --panel:#fff;
@@ -542,7 +542,71 @@ function updateHeadingMarker(){
 let lastHeadingUpdate=0;
 let pendingHeading=null;
 let headingTimer=null;
+let oppositeHeadingCandidate=null;
+let oppositeHeadingCount=0;
+
 const HEADING_UPDATE_INTERVAL_MS=200;
+const HEADING_SMOOTHING_FACTOR=0.28;
+const LARGE_HEADING_JUMP_DEG=120;
+const REQUIRED_LARGE_JUMP_SAMPLES=3;
+const CANDIDATE_TOLERANCE_DEG=35;
+
+function normalizeAngle(angle){
+  return ((angle%360)+360)%360;
+}
+
+function shortestAngleDifference(from,to){
+  return ((to-from+540)%360)-180;
+}
+
+function circularDistance(a,b){
+  return Math.abs(shortestAngleDifference(a,b));
+}
+
+function filterHeading(rawHeading){
+  const normalized=normalizeAngle(rawHeading);
+
+  if(!Number.isFinite(currentHeading)){
+    oppositeHeadingCandidate=null;
+    oppositeHeadingCount=0;
+    return normalized;
+  }
+
+  const jump=Math.abs(shortestAngleDifference(currentHeading,normalized));
+
+  // Einzelne Sprünge um ungefähr 180° sind bei Smartphone-Sensoren häufig.
+  // Ein grosser Richtungswechsel wird erst übernommen, wenn mehrere
+  // aufeinanderfolgende Messungen dieselbe neue Richtung bestätigen.
+  if(jump>LARGE_HEADING_JUMP_DEG){
+    if(
+      oppositeHeadingCandidate!==null &&
+      circularDistance(oppositeHeadingCandidate,normalized)<=CANDIDATE_TOLERANCE_DEG
+    ){
+      oppositeHeadingCount++;
+      const candidateStep=shortestAngleDifference(oppositeHeadingCandidate,normalized);
+      oppositeHeadingCandidate=normalizeAngle(oppositeHeadingCandidate+candidateStep*0.5);
+    }else{
+      oppositeHeadingCandidate=normalized;
+      oppositeHeadingCount=1;
+    }
+
+    if(oppositeHeadingCount<REQUIRED_LARGE_JUMP_SAMPLES){
+      return null;
+    }
+
+    const confirmed=oppositeHeadingCandidate;
+    oppositeHeadingCandidate=null;
+    oppositeHeadingCount=0;
+    return confirmed;
+  }
+
+  oppositeHeadingCandidate=null;
+  oppositeHeadingCount=0;
+
+  // Kreisförmige Glättung, damit auch der Übergang 359° → 0° ruhig bleibt.
+  const delta=shortestAngleDifference(currentHeading,normalized);
+  return normalizeAngle(currentHeading+delta*HEADING_SMOOTHING_FACTOR);
+}
 
 function applyPendingHeading(){
   headingTimer=null;
@@ -559,7 +623,10 @@ function onOrientation(event){
   else if(typeof event.alpha==="number") heading=(360-event.alpha)%360;
   if(heading===null) return;
 
-  pendingHeading=heading;
+  const filteredHeading=filterHeading(heading);
+  if(filteredHeading===null) return;
+
+  pendingHeading=filteredHeading;
   const elapsed=performance.now()-lastHeadingUpdate;
 
   if(elapsed>=HEADING_UPDATE_INTERVAL_MS){
