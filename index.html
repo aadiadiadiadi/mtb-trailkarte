@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.1.1">
+<meta name="app-version" content="2.1.2">
 <style>
 :root{
   --panel:#fff;
@@ -526,7 +526,7 @@ mapContainer.addEventListener("touchend",()=>{
 
 function headingIcon(){
   const mapBearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
-  const rotation=Number.isFinite(currentHeading) ? mapBearing-currentHeading : mapBearing;
+  const rotation=Number.isFinite(currentHeading) ? currentHeading+mapBearing : mapBearing;
   return L.divIcon({
     className:"",
     iconSize:[34,34],
@@ -584,7 +584,7 @@ async function enableOrientation(){
 
 function updateLocation(pos){
   const ll=[pos.coords.latitude,pos.coords.longitude], acc=pos.coords.accuracy;
-  if(!locationMarker) locationMarker=L.marker(ll,{icon:headingIcon(),interactive:false,zIndexOffset:1000}).addTo(map);
+  if(!locationMarker) locationMarker=L.marker(ll,{icon:headingIcon(),interactive:false,zIndexOffset:1000,rotateWithView:false}).addTo(map);
   else locationMarker.setLatLng(ll);
   if(!accuracyCircle) accuracyCircle=L.circle(ll,{radius:acc,color:"#2563eb",weight:1,fillOpacity:.08,interactive:false}).addTo(map);
   else accuracyCircle.setLatLng(ll).setRadius(acc);
