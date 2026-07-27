@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.1.0">
+<meta name="app-version" content="2.1.1">
 <style>
 :root{
   --panel:#fff;
@@ -526,7 +526,7 @@ mapContainer.addEventListener("touchend",()=>{
 
 function headingIcon(){
   const mapBearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
-  const rotation=Number.isFinite(currentHeading) ? currentHeading-mapBearing : -mapBearing;
+  const rotation=Number.isFinite(currentHeading) ? mapBearing-currentHeading : mapBearing;
   return L.divIcon({
     className:"",
     iconSize:[34,34],
