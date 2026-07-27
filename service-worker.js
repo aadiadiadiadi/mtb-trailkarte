@@ -1,50 +1,80 @@
-const CACHE='mtb-trails-v7';
-const APP_FILES=[
+const APP_VERSION = "2.1.0";
+const STATIC_CACHE = `mtb-trailkarte-static-${APP_VERSION}`;
+const DATA_CACHE = `mtb-trailkarte-data-${APP_VERSION}`;
+
+const STATIC_FILES = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icon-192.svg",
   "./icon-512.svg",
-  "./data-meta.json",
-  "./trails-01.geojson",
-  "./trails-02.geojson",
-  "./trails-03.geojson",
-  "./trails-04.geojson",
-  "./trails-05.geojson",
-  "./trails-06.geojson",
-  "./trails-07.geojson",
-  "./trails-08.geojson",
-  "./trails-09.geojson",
-  "./trails-10.geojson",
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
-  "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-  "https://unpkg.com/leaflet-rotate@0.2.7/dist/leaflet-rotate-src.js"
+  "./data-meta.json"
 ];
 
-self.addEventListener('install',event=>{
-  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(APP_FILES)).catch(()=>{}));
+self.addEventListener("install", event => {
   self.skipWaiting();
-});
-
-self.addEventListener('activate',event=>{
-  event.waitUntil(caches.keys().then(keys=>Promise.all(
-    keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))
-  )));
-  self.clients.claim();
-});
-
-self.addEventListener('fetch',event=>{
-  if(event.request.method!=='GET') return;
-  event.respondWith(
-    caches.match(event.request).then(cached=>{
-      const network=fetch(event.request).then(resp=>{
-        if(resp && resp.status===200 && resp.type!=='opaque'){
-          const copy=resp.clone();
-          caches.open(CACHE).then(c=>c.put(event.request,copy));
-        }
-        return resp;
-      }).catch(()=>cached);
-      return cached || network;
-    })
+  event.waitUntil(
+    caches.open(STATIC_CACHE).then(cache => cache.addAll(STATIC_FILES))
   );
 });
+
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(
+        keys
+          .filter(key => key.startsWith("mtb-trailkarte-") && ![STATIC_CACHE, DATA_CACHE].includes(key))
+          .map(key => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", event => {
+  if(event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+  if(url.origin !== self.location.origin) return;
+
+  const isNavigation = event.request.mode === "navigate";
+  const isGeoJson = url.pathname.endsWith(".geojson");
+  const isMetadata = url.pathname.endsWith("data-meta.json");
+
+  if(isNavigation || isMetadata){
+    event.respondWith(networkFirst(event.request, STATIC_CACHE));
+    return;
+  }
+
+  if(isGeoJson){
+    event.respondWith(cacheFirstWithRefresh(event.request, DATA_CACHE));
+    return;
+  }
+
+  event.respondWith(cacheFirstWithRefresh(event.request, STATIC_CACHE));
+});
+
+async function networkFirst(request, cacheName){
+  try{
+    const response = await fetch(request, {cache:"no-store"});
+    if(response && response.ok){
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  }catch{
+    const cached = await caches.match(request);
+    return cached || caches.match("./index.html");
+  }
+}
+
+async function cacheFirstWithRefresh(request, cacheName){
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+
+  const refresh = fetch(request).then(response => {
+    if(response && response.ok) cache.put(request, response.clone());
+    return response;
+  }).catch(() => null);
+
+  return cached || refresh || new Response("Offline nicht verfügbar", {status:503});
+}

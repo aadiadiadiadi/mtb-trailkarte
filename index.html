@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
+<meta name="app-version" content="2.1.0">
 <style>
 :root{
   --panel:#fff;
@@ -61,7 +62,7 @@ button,input,select{font:inherit}
 .section:first-of-type{border-top:0}
 .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}
 .priority-list{display:flex;flex-direction:column;gap:8px}
-.priority-item{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;padding:9px;border:1px solid var(--border);border-radius:10px}
+.priority-item{display:grid;grid-template-columns:auto minmax(90px,1fr) auto auto auto auto;gap:8px;align-items:center;padding:9px;border:1px solid var(--border);border-radius:10px}
 .priority-item button,.priority-item a{border:0;background:var(--panel-2);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:inherit;font-weight:700}
 .drawer-actions{display:flex;gap:8px;position:sticky;bottom:0;background:var(--panel);padding-top:12px}
 .drawer-actions button{flex:1;padding:11px;border:0;border-radius:10px}
@@ -135,13 +136,6 @@ select,input{background:var(--panel);border-color:var(--border)}
   </div>
 
   <div class="section">
-    <div class="row"><label for="maxDifficulty">Maximale Schwierigkeit</label>
-      <select id="maxDifficulty">
-        <option value="all">Alle</option>
-        <option value="0">S0</option><option value="1">S1</option><option value="2">S2</option>
-        <option value="3">S3</option><option value="4">S4</option><option value="5">S5</option><option value="6">S6</option>
-      </select>
-    </div>
     <div class="row"><label for="showUnrated">Unbewertete Trails anzeigen</label><input id="showUnrated" type="checkbox"></div>
     <div class="row"><label for="showRoutes">MTB-Routen anzeigen</label><input id="showRoutes" type="checkbox"></div>
     <div class="row"><label for="highContrast">Hoher Kontrast</label><input id="highContrast" type="checkbox"></div>
@@ -206,7 +200,11 @@ const TAGS={
 const DEFAULT_SETTINGS={
   priority:["mtb:scale","mtb:scale:imba","mtb:scale:uphill"],
   enabled:{"mtb:scale":true,"mtb:scale:imba":true,"mtb:scale:uphill":true},
-  maxDifficulty:"all",
+  maxByTag:{
+    "mtb:scale":"all",
+    "mtb:scale:imba":"all",
+    "mtb:scale:uphill":"all"
+  },
   showUnrated:false,
   showRoutes:false,
   highContrast:true,
@@ -215,6 +213,7 @@ const DEFAULT_SETTINGS={
 };
 let settings=Object.assign({},DEFAULT_SETTINGS,JSON.parse(localStorage.getItem("mtbSettings")||"{}"));
 settings.enabled=Object.assign({},DEFAULT_SETTINGS.enabled,settings.enabled||{});
+settings.maxByTag=Object.assign({},DEFAULT_SETTINGS.maxByTag,settings.maxByTag||{});
 if(typeof settings.showUnrated!=="boolean") settings.showUnrated=false;
 if(typeof settings.showRoutes!=="boolean") settings.showRoutes=false;
 
@@ -278,11 +277,14 @@ function passesFilter(p){
   if(isMtbRoute(p) && !settings.showRoutes) return false;
   if(!isMtbRoute(p) && !isRated(p) && !settings.showUnrated) return false;
 
-  if(settings.maxDifficulty==="all") return true;
   const tag=activeTagFor(p);
   if(!tag) return true;
+
+  const maximum=settings.maxByTag?.[tag] ?? "all";
+  if(maximum==="all") return true;
+
   const v=parseInt(normScale(p[tag]),10);
-  return Number.isNaN(v) || v<=parseInt(settings.maxDifficulty,10);
+  return Number.isNaN(v) || v<=parseInt(maximum,10);
 }
 function styleMain(f){
   const p=f.properties||{};
@@ -321,8 +323,26 @@ function popupHtml(p){
   }
   rows+=`<div>Oberfläche</div><div>${escapeHtml(p.surface||"–")}</div>`;
   rows+=`<div>Tracktype</div><div>${escapeHtml(p.tracktype||"–")}</div>`;
-  rows+=`<div>Steigung</div><div>${escapeHtml(p.incline||"–")}</div>`;
-  rows+=`</div><p><button id="favBtn" class="primary" style="border:0;border-radius:10px;padding:10px">★ Favorit</button></p>`;
+
+  if(p.incline!==undefined && String(p.incline).trim()!==""){
+    rows+=`<div>Steigung</div><div>${escapeHtml(String(p.incline))} <span class="small">(OSM)</span></div>`;
+  }else if(p.max_uphill_percent!==undefined || p.max_downhill_percent!==undefined){
+    const up=p.max_uphill_percent!==undefined ? `${escapeHtml(String(p.max_uphill_percent))} %` : "–";
+    const down=p.max_downhill_percent!==undefined ? `${escapeHtml(String(p.max_downhill_percent))} %` : "–";
+    rows+=`<div>Max. Steigung</div><div>${up} <span class="small">(Geländemodell)</span></div>`;
+    rows+=`<div>Max. Gefälle</div><div>${down} <span class="small">(Geländemodell)</span></div>`;
+  }else{
+    rows+=`<div>Steigung</div><div><span class="small">Keine Steigungsangabe vorhanden</span></div>`;
+  }
+
+  if(p.elevation_gain_m!==undefined){
+    rows+=`<div>Höhenmeter aufwärts</div><div>${escapeHtml(String(p.elevation_gain_m))} m</div>`;
+  }
+  if(p.elevation_loss_m!==undefined){
+    rows+=`<div>Höhenmeter abwärts</div><div>${escapeHtml(String(p.elevation_loss_m))} m</div>`;
+  }
+
+  rows+=`</div>`;
   return rows;
 }
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
@@ -343,20 +363,11 @@ function selectFeature(layer,f){
   sheet.innerHTML=popupHtml(f.properties||{});
   sheet.classList.add("open");
   setTimeout(()=>{
-    const btn=document.getElementById("favBtn");
-    if(btn) btn.onclick=()=>toggleFavorite(f);
     const closeBtn=document.getElementById("sheetCloseBtn");
     if(closeBtn) closeBtn.onclick=closeSheet;
   },0);
 }
 function featureId(f){return (f.id||"")+"|"+((f.properties||{}).name||"")+"|"+JSON.stringify(f.geometry.coordinates[0]||[]).slice(0,80)}
-function toggleFavorite(f){
-  const favs=JSON.parse(localStorage.getItem("mtbFavorites")||"[]");
-  const id=featureId(f), idx=favs.findIndex(x=>x.id===id);
-  if(idx>=0){favs.splice(idx,1);showNotice("Favorit entfernt");}
-  else{favs.push({id,name:(f.properties||{}).name||"Unbenannter Trail",properties:f.properties});showNotice("Favorit gespeichert");}
-  localStorage.setItem("mtbFavorites",JSON.stringify(favs));
-}
 
 function rebuildLayers(fit=false){
   if(trailLayer) map.removeLayer(trailLayer);
@@ -447,7 +458,7 @@ async function loadData(cacheBust=false){
   searchIndex=[];
   rebuildLayers(!map._loaded);
   document.getElementById("dataStatus").textContent=
-    `${geoData.features?.length||0} OSM-Objekte geladen`;
+    `${geoData.features?.length||0} OSM-Objekte geladen · Canvas-Darstellung aktiv`;
 }
 
 async function loadMetadata(cacheBust=false){
@@ -486,7 +497,10 @@ function updateNorthArrow(){
   const bearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
   document.getElementById("northBtn").style.transform=`rotate(${bearing}deg)`;
 }
-map.on("rotate",updateNorthArrow);
+map.on("rotate",()=>{
+  updateNorthArrow();
+  updateHeadingMarker();
+});
 updateNorthArrow();
 
 /* Kleine unbeabsichtigte Zwei-Finger-Drehungen werden nach dem Loslassen
@@ -511,7 +525,8 @@ mapContainer.addEventListener("touchend",()=>{
 
 
 function headingIcon(){
-  const rotation=Number.isFinite(currentHeading)?currentHeading:0;
+  const mapBearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
+  const rotation=Number.isFinite(currentHeading) ? currentHeading-mapBearing : -mapBearing;
   return L.divIcon({
     className:"",
     iconSize:[34,34],
@@ -524,13 +539,33 @@ function updateHeadingMarker(){
   if(locationMarker) locationMarker.setIcon(headingIcon());
 }
 
+let lastHeadingUpdate=0;
+let pendingHeading=null;
+let headingTimer=null;
+const HEADING_UPDATE_INTERVAL_MS=200;
+
+function applyPendingHeading(){
+  headingTimer=null;
+  if(pendingHeading===null) return;
+  currentHeading=pendingHeading;
+  pendingHeading=null;
+  lastHeadingUpdate=performance.now();
+  updateHeadingMarker();
+}
+
 function onOrientation(event){
   let heading=null;
   if(typeof event.webkitCompassHeading==="number") heading=event.webkitCompassHeading;
   else if(typeof event.alpha==="number") heading=(360-event.alpha)%360;
-  if(heading!==null){
-    currentHeading=heading;
-    updateHeadingMarker();
+  if(heading===null) return;
+
+  pendingHeading=heading;
+  const elapsed=performance.now()-lastHeadingUpdate;
+
+  if(elapsed>=HEADING_UPDATE_INTERVAL_MS){
+    applyPendingHeading();
+  }else if(!headingTimer){
+    headingTimer=setTimeout(applyPendingHeading,HEADING_UPDATE_INTERVAL_MS-elapsed);
   }
 }
 
@@ -679,17 +714,24 @@ document.getElementById("searchInput").addEventListener("input",e=>{
 
 function renderPriority(){
   const box=document.getElementById("priorityList");
-  box.innerHTML=settings.priority.map((tag,i)=>`
+  box.innerHTML=settings.priority.map((tag,i)=>{
+    const options=['<option value="all">Alle</option>']
+      .concat(TAGS[tag].order.map(v=>`<option value="${v}" ${String(settings.maxByTag[tag])===String(v)?"selected":""}>bis ${TAGS[tag].prefix||""}${v}</option>`))
+      .join("");
+    return `
     <div class="priority-item" data-tag="${tag}">
       <input type="checkbox" ${settings.enabled[tag]?"checked":""}>
       <span>${TAGS[tag].label}<br><span class="small">${tag}</span></span>
+      <select class="level-filter" aria-label="Maximale Schwierigkeit für ${TAGS[tag].label}">${options}</select>
       <a class="info-link" href="${TAG_DOCS[tag]}" target="_blank" rel="noopener noreferrer" aria-label="Dokumentation zu ${TAGS[tag].label}" title="OSM-Dokumentation öffnen">i</a>
       <button data-dir="-1" ${i===0?"disabled":""}>↑</button>
       <button data-dir="1" ${i===settings.priority.length-1?"disabled":""}>↓</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   box.querySelectorAll(".priority-item").forEach(row=>{
     const tag=row.dataset.tag;
     row.querySelector('input').onchange=e=>settings.enabled[tag]=e.target.checked;
+    row.querySelector(".level-filter").onchange=e=>settings.maxByTag[tag]=e.target.value;
     row.querySelectorAll("button[data-dir]").forEach(btn=>btn.onclick=()=>{
       const from=settings.priority.indexOf(tag), to=from+Number(btn.dataset.dir);
       [settings.priority[from],settings.priority[to]]=[settings.priority[to],settings.priority[from]];
@@ -699,7 +741,6 @@ function renderPriority(){
 }
 document.getElementById("settingsBtn").onclick=()=>{
   renderPriority();
-  document.getElementById("maxDifficulty").value=settings.maxDifficulty;
   document.getElementById("showUnrated").checked=settings.showUnrated;
   document.getElementById("showRoutes").checked=settings.showRoutes;
   document.getElementById("highContrast").checked=settings.highContrast;
@@ -709,7 +750,6 @@ document.getElementById("settingsBtn").onclick=()=>{
 };
 document.getElementById("closeSettings").onclick=()=>document.getElementById("drawer").classList.remove("open");
 document.getElementById("saveSettings").onclick=()=>{
-  settings.maxDifficulty=document.getElementById("maxDifficulty").value;
   settings.showUnrated=document.getElementById("showUnrated").checked;
   settings.showRoutes=document.getElementById("showRoutes").checked;
   settings.highContrast=document.getElementById("highContrast").checked;
@@ -749,7 +789,21 @@ document.getElementById("gpxInput").onchange=e=>{
 };
 
 Promise.all([loadData(),loadMetadata()]).catch(e=>showNotice(e.message,8000));
-if("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("service-worker.js").then(reg=>{
+    reg.update();
+    reg.addEventListener("updatefound",()=>{
+      const worker=reg.installing;
+      if(!worker) return;
+      worker.addEventListener("statechange",()=>{
+        if(worker.state==="installed" && navigator.serviceWorker.controller){
+          showNotice("Neue App-Version verfügbar. Seite wird aktualisiert.",2500);
+          setTimeout(()=>location.reload(),2600);
+        }
+      });
+    });
+  }).catch(()=>{});
+}
 </script>
 </body>
 </html>
