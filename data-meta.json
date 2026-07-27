@@ -1,5 +1,5 @@
 {
-  "app_version": "2.1.4",
+  "app_version": "2.2.0",
   "data_version": "2026-07-26T17:01:52Z",
   "updated_at": "2026-07-26T17:01:52Z",
   "osm_data_timestamp": null,
@@ -10,5 +10,7 @@
   "incline_osm_count": 0,
   "incline_dem_count": 0,
   "incline_pending_count": 0,
-  "coverage": "Schweiz; grenzüberschreitende Wege vollständig"
+  "coverage": "Schweiz; grenzüberschreitende Wege vollständig",
+  "elevation_method": "Höhe der beiden Endpunkte des Schweizer Trailabschnitts",
+  "elevation_source": "swisstopo Height Service / swissALTI3D"
 }

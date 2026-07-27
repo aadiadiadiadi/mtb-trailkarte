@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.1.4">
+<meta name="app-version" content="2.2.0">
 <style>
 :root{
   --panel:#fff;
@@ -335,11 +335,21 @@ function popupHtml(p){
     rows+=`<div>Steigung</div><div><span class="small">Keine Steigungsangabe vorhanden</span></div>`;
   }
 
-  if(p.elevation_gain_m!==undefined){
-    rows+=`<div>Höhenmeter aufwärts</div><div>${escapeHtml(String(p.elevation_gain_m))} m</div>`;
-  }
-  if(p.elevation_loss_m!==undefined){
-    rows+=`<div>Höhenmeter abwärts</div><div>${escapeHtml(String(p.elevation_loss_m))} m</div>`;
+  if(
+    p.elevation_higher_m!==undefined &&
+    p.elevation_lower_m!==undefined &&
+    p.elevation_difference_m!==undefined
+  ){
+    rows+=`<div>Höherer Punkt</div><div>${escapeHtml(String(p.elevation_higher_m))} m ü. M.</div>`;
+    rows+=`<div>Tieferer Punkt</div><div>${escapeHtml(String(p.elevation_lower_m))} m ü. M.</div>`;
+    rows+=`<div>Höhendifferenz</div><div>${escapeHtml(String(p.elevation_difference_m))} m</div>`;
+    rows+=`<div>Höhenquelle</div><div>${escapeHtml(p.elevation_source||"swisstopo")}</div>`;
+  }else if(p.elevation_status==="outside_switzerland"){
+    rows+=`<div>Höhenangaben</div><div><span class="small">Trail liegt ausserhalb der Schweiz</span></div>`;
+  }else if(p.elevation_status==="no_swiss_segment"){
+    rows+=`<div>Höhenangaben</div><div><span class="small">Kein auswertbarer Schweizer Abschnitt</span></div>`;
+  }else{
+    rows+=`<div>Höhenangaben</div><div><span class="small">Noch nicht berechnet</span></div>`;
   }
 
   rows+=`</div>`;
