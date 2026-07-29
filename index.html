@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.2.0">
+<meta name="app-version" content="2.2.1">
 <style>
 :root{
   --panel:#fff;
@@ -536,7 +536,7 @@ mapContainer.addEventListener("touchend",()=>{
 
 function headingIcon(){
   const mapBearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
-  const rotation=Number.isFinite(currentHeading) ? mapBearing-currentHeading : mapBearing;
+  const rotation=Number.isFinite(currentHeading) ? currentHeading-mapBearing : -mapBearing;
   return L.divIcon({
     className:"",
     iconSize:[34,34],
@@ -866,6 +866,11 @@ document.getElementById("gpxInput").onchange=e=>{
 };
 
 Promise.all([loadData(),loadMetadata()]).catch(e=>showNotice(e.message,8000));
+
+// Beim Öffnen der App sofort den Standort bestimmen und auf Zoom 16 zentrieren.
+// Die Kompassfreigabe kann auf iPhones weiterhin erst nach einem Antippen
+// des Standortbuttons erteilt werden; die Standortanzeige funktioniert trotzdem.
+setTimeout(()=>locate(),350);
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("service-worker.js").then(reg=>{
     reg.update();
