@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.2.1">
+<meta name="app-version" content="2.2.2">
 <style>
 :root{
   --panel:#fff;
@@ -229,14 +229,58 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()
   if((settings.theme||"system")==="system") applyTheme("system");
 });
 
-const canvasRenderer=L.canvas({padding:0.35,tolerance:5});
-const map=L.map("map",{zoomControl:false,preferCanvas:true,renderer:canvasRenderer,rotate:true,touchRotate:true,bearing:0});
+const GUETSCHWALD=[47.05012,8.29021];
+const START_ZOOM=16;
+
+const map=L.map("map",{
+  zoomControl:false,
+  preferCanvas:true,
+  rotate:true,
+  touchRotate:true,
+  bearing:0,
+  fadeAnimation:false,
+  markerZoomAnimation:false,
+  inertia:true
+});
+
+// Die Karte ist sofort benutzbar und startet immer im Gütschwald.
+// Sobald ein Standort verfügbar ist, wechselt sie automatisch dorthin.
+map.setView(GUETSCHWALD,START_ZOOM,{animate:false});
+
+map.createPane("trailOutlinePane");
+map.getPane("trailOutlinePane").style.zIndex=410;
+map.getPane("trailOutlinePane").style.pointerEvents="none";
+
+map.createPane("trailPane");
+map.getPane("trailPane").style.zIndex=420;
+
+const outlineRenderer=L.canvas({
+  pane:"trailOutlinePane",
+  padding:0.25,
+  tolerance:0
+});
+const trailRenderer=L.canvas({
+  pane:"trailPane",
+  padding:0.25,
+  tolerance:12
+});
+
 L.control.zoom({position:"bottomright"}).addTo(map);
-const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap-Mitwirkende"});
-const aerial=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Tiles © Esri, Maxar, Earthstar Geographics und weitere"});
+const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19,
+  attribution:"© OpenStreetMap-Mitwirkende",
+  updateWhenIdle:true,
+  keepBuffer:2
+});
+const aerial=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{
+  maxZoom:19,
+  attribution:"Tiles © Esri, Maxar, Earthstar Geographics und weitere",
+  updateWhenIdle:true,
+  keepBuffer:2
+});
 osm.addTo(map);
 
-let geoData=null, trailLayer=null, outlineLayer=null, hitLayer=null, selectedLayer=null, searchIndex=[], gpxLayer=null;
+let geoData=null, trailLayer=null, outlineLayer=null, selectedLayer=null, searchIndex=[], gpxLayer=null;
 let locationMarker=null, accuracyCircle=null, watchId=null;
 let currentHeading=null, orientationListenerInstalled=false;
 
@@ -293,25 +337,23 @@ function styleMain(f){
       color:"#6b7280",
       weight:settings.highContrast?3:2,
       opacity:passesFilter(p)?0.8:0,
-      dashArray:"7 7"
+      dashArray:"7 7",
+      smoothFactor:1.5
     };
   }
   return {
     color:colorFor(p),
     weight:settings.highContrast?4:3,
-    opacity:passesFilter(p)?0.95:0
+    opacity:passesFilter(p)?0.95:0,
+    smoothFactor:1.5
   };
 }
 function styleOutline(f){
   const p=f.properties||{};
   if(isMtbRoute(p)){
-    return {color:"#ffffff",weight:settings.highContrast?6:4,opacity:passesFilter(p)?0.65:0,dashArray:"7 7"};
+    return {color:"#ffffff",weight:settings.highContrast?6:4,opacity:passesFilter(p)?0.65:0,dashArray:"7 7",smoothFactor:1.5};
   }
-  return {color:"#ffffff",weight:settings.highContrast?7:5,opacity:passesFilter(p)?0.85:0};
-}
-function hitStyle(f){
-  const visible=passesFilter((f&&f.properties)||{});
-  return {color:"#000",weight:visible?24:0,opacity:0};
+  return {color:"#ffffff",weight:settings.highContrast?7:5,opacity:passesFilter(p)?0.85:0,smoothFactor:1.5};
 }
 
 function popupHtml(p){
@@ -382,38 +424,31 @@ function featureId(f){return (f.id||"")+"|"+((f.properties||{}).name||"")+"|"+JS
 function rebuildLayers(fit=false){
   if(trailLayer) map.removeLayer(trailLayer);
   if(outlineLayer) map.removeLayer(outlineLayer);
-  if(hitLayer) map.removeLayer(hitLayer);
 
   searchIndex=[];
-  const layerById=new Map();
-
   const layerFilter=f=>isLineFeature(f);
 
   outlineLayer=L.geoJSON(geoData,{
     filter:layerFilter,
+    renderer:outlineRenderer,
+    pane:"trailOutlinePane",
     style:styleOutline,
     interactive:false
   }).addTo(map);
 
   trailLayer=L.geoJSON(geoData,{
     filter:layerFilter,
+    renderer:trailRenderer,
+    pane:"trailPane",
     style:styleMain,
     onEachFeature:(f,l)=>{
-      layerById.set(featureId(f),l);
+      // Der sichtbare Layer übernimmt auch die Treffererkennung.
+      // Die grössere Canvas-Toleranz ersetzt den früheren dritten GeoJSON-Layer.
+      l.on("click",()=>{
+        if(passesFilter(f.properties||{})) selectFeature(l,f);
+      });
       const p=f.properties||{}, name=p.name||p["mtb:name"];
       if(name) searchIndex.push({name:String(name),layer:l,feature:f});
-    }
-  }).addTo(map);
-
-  hitLayer=L.geoJSON(geoData,{
-    filter:layerFilter,
-    style:hitStyle,
-    onEachFeature:(f,l)=>{
-      l.on("click",()=>{
-        if(!passesFilter(f.properties||{})) return;
-        const visible=layerById.get(featureId(f));
-        if(visible) selectFeature(visible,f);
-      });
     }
   }).addTo(map);
 
@@ -421,13 +456,37 @@ function rebuildLayers(fit=false){
   if(fit && trailLayer.getBounds().isValid()) map.fitBounds(trailLayer.getBounds(),{padding:[20,20]});
   renderLegend();
 }
-
 function updateLayerStyles(){
   if(outlineLayer) outlineLayer.setStyle(styleOutline);
   if(trailLayer) trailLayer.setStyle(styleMain);
-  if(hitLayer) hitLayer.setStyle(hitStyle);
   renderLegend();
 }
+
+// Beim Verschieben, Zoomen und Drehen wird die weisse Kontur kurz
+// ausgeblendet. Dadurch muss während der Geste nur eine Vektorebene
+// zusammengesetzt werden. Nach dem Loslassen erscheint sie sofort wieder.
+let interactionDepth=0;
+let restoreOutlineTimer=null;
+
+function beginFastInteraction(){
+  interactionDepth++;
+  clearTimeout(restoreOutlineTimer);
+  const pane=map.getPane("trailOutlinePane");
+  if(pane) pane.style.visibility="hidden";
+}
+
+function endFastInteraction(){
+  interactionDepth=Math.max(0,interactionDepth-1);
+  if(interactionDepth!==0) return;
+  clearTimeout(restoreOutlineTimer);
+  restoreOutlineTimer=setTimeout(()=>{
+    const pane=map.getPane("trailOutlinePane");
+    if(pane) pane.style.visibility="";
+  },60);
+}
+
+map.on("movestart zoomstart rotatestart",beginFastInteraction);
+map.on("moveend zoomend rotateend",endFastInteraction);
 
 function renderLegend(){
   const body=document.getElementById("legendBody");
@@ -536,7 +595,7 @@ mapContainer.addEventListener("touchend",()=>{
 
 function headingIcon(){
   const mapBearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
-  const rotation=Number.isFinite(currentHeading) ? currentHeading-mapBearing : -mapBearing;
+  const rotation=Number.isFinite(currentHeading) ? mapBearing-currentHeading : mapBearing;
   return L.divIcon({
     className:"",
     iconSize:[34,34],
@@ -667,17 +726,46 @@ function updateLocation(pos){
   else accuracyCircle.setLatLng(ll).setRadius(acc);
   if(settings.followLocation) map.setView(ll,Math.max(map.getZoom(),16),{animate:false});
 }
-async function locate(){
-  if(!navigator.geolocation){showNotice("Standort wird von diesem Browser nicht unterstützt");return;}
+async function locate({silent=false}={}){
+  if(!navigator.geolocation){
+    if(!silent) showNotice("Standort wird von diesem Browser nicht unterstützt");
+    return;
+  }
+
   await enableOrientation();
+
   navigator.geolocation.getCurrentPosition(
-    p=>{updateLocation(p);map.setView([p.coords.latitude,p.coords.longitude],16);},
-    e=>showNotice(e.code===1?"Standortberechtigung wurde verweigert":"Standort konnte nicht bestimmt werden"),
+    p=>{
+      updateLocation(p);
+      map.setView([p.coords.latitude,p.coords.longitude],START_ZOOM,{animate:false});
+    },
+    e=>{
+      // Bei fehlender Berechtigung oder Zeitüberschreitung bleibt die Karte
+      // im Gütschwald auf Zoom 16.
+      if(!silent){
+        showNotice(
+          e.code===1
+            ?"Standortberechtigung wurde verweigert – Gütschwald wird angezeigt"
+            :"Standort konnte nicht bestimmt werden – Gütschwald wird angezeigt"
+        );
+      }
+    },
     {enableHighAccuracy:true,timeout:15000,maximumAge:5000}
   );
-  if(watchId===null) watchId=navigator.geolocation.watchPosition(updateLocation,()=>{},{
-    enableHighAccuracy:true,timeout:20000,maximumAge:3000
-  });
+
+  if(watchId===null){
+    watchId=navigator.geolocation.watchPosition(
+      p=>{
+        const hadNoLocation=!locationMarker;
+        updateLocation(p);
+        if(hadNoLocation){
+          map.setView([p.coords.latitude,p.coords.longitude],START_ZOOM,{animate:false});
+        }
+      },
+      ()=>{},
+      {enableHighAccuracy:true,timeout:20000,maximumAge:3000}
+    );
+  }
 }
 document.getElementById("locateBtn").onclick=locate;
 
@@ -870,7 +958,7 @@ Promise.all([loadData(),loadMetadata()]).catch(e=>showNotice(e.message,8000));
 // Beim Öffnen der App sofort den Standort bestimmen und auf Zoom 16 zentrieren.
 // Die Kompassfreigabe kann auf iPhones weiterhin erst nach einem Antippen
 // des Standortbuttons erteilt werden; die Standortanzeige funktioniert trotzdem.
-setTimeout(()=>locate(),350);
+setTimeout(()=>locate({silent:true}),350);
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("service-worker.js").then(reg=>{
     reg.update();
