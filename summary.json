@@ -1,0 +1,10 @@
+{
+  "selected": 114,
+  "completed": 114,
+  "failed": 0,
+  "spacing_m": 20.0,
+  "radius_m": 1200.0,
+  "duration_seconds": 0.1,
+  "failures": [],
+  "note": "PoC-Gebiet liegt vollständig in der Schweiz; Grenz-Clipping ist in diesem PoC nicht ausgelöst."
+}
