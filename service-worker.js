@@ -1,4 +1,4 @@
-const APP_VERSION = "2.4.0";
+const APP_VERSION = "2.4.1";
 const STATIC_CACHE = `mtb-trailkarte-static-${APP_VERSION}`;
 const DATA_CACHE = `mtb-trailkarte-data-${APP_VERSION}`;
 

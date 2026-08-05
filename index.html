@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.4.0">
+<meta name="app-version" content="2.4.1">
 <style>
 :root{
   --panel:#fff;
@@ -169,8 +169,7 @@ select,input{background:var(--panel);border-color:var(--border)}
   </div>
 
   <div class="drawer-actions">
-    <button id="closeSettings" class="secondary">Schliessen</button>
-    <button id="saveSettings" class="primary">Übernehmen</button>
+    <button id="closeSettings" class="primary">Schliessen</button>
   </div>
 </div>
 
@@ -281,52 +280,48 @@ const outlineRenderer=L.canvas({
   padding:0.25,
   tolerance:0
 });
-const DirectionCanvas=L.Canvas.extend({
-  _updatePoly(layer,closed){
-    L.Canvas.prototype._updatePoly.call(this,layer,closed);
-    if(!this._drawing || closed || !settings.showTrailDirection || !passesFilter(layer.feature?.properties||{})) return;
-    this._drawDirectionChevrons(layer);
-  },
-  _drawDirectionChevrons(layer){
-    const context=this._ctx;
-    if(!context || !layer._parts) return;
-    const properties=layer.feature?.properties||{};
-    const reverse=["-1","reverse"].includes(String(properties.oneway||properties["oneway:bicycle"]||"").toLowerCase());
-    const spacing=56,size=7;
-    context.save();
-    context.strokeStyle="rgba(255,255,255,.95)";
-    context.lineWidth=settings.highContrast?2.4:2;
-    context.lineCap="round";
-    context.lineJoin="round";
-    for(const rawPart of layer._parts){
-      const part=reverse ? [...rawPart].reverse() : rawPart;
-      let remaining=spacing/2;
-      for(let index=1;index<part.length;index++){
-        const start=part[index-1],end=part[index];
-        const dx=end.x-start.x,dy=end.y-start.y,length=Math.hypot(dx,dy);
-        if(length<1) continue;
-        const ux=dx/length,uy=dy/length;
-        while(remaining<=length){
-          const x=start.x+ux*remaining,y=start.y+uy*remaining;
-          const backX=x-ux*size,backY=y-uy*size;
-          context.beginPath();
-          context.moveTo(backX-uy*size*.65,backY+ux*size*.65);
-          context.lineTo(x,y);
-          context.lineTo(backX+uy*size*.65,backY-ux*size*.65);
-          context.stroke();
-          remaining+=spacing;
-        }
-        remaining-=length;
-      }
-    }
-    context.restore();
-  }
-});
-const trailRenderer=new DirectionCanvas({
+const trailRenderer=L.canvas({
   pane:"trailPane",
   padding:0.25,
   tolerance:12
 });
+const updateTrailPoly=trailRenderer._updatePoly;
+trailRenderer._updatePoly=function(layer,closed){
+  updateTrailPoly.call(this,layer,closed);
+  if(!this._drawing || closed || !settings.showTrailDirection || !passesFilter(layer.feature?.properties||{})) return;
+  const context=this._ctx;
+  if(!context || !layer._parts) return;
+  const properties=layer.feature?.properties||{};
+  const reverse=["-1","reverse"].includes(String(properties.oneway||properties["oneway:bicycle"]||"").toLowerCase());
+  const spacing=56,size=7;
+  context.save();
+  context.strokeStyle="rgba(255,255,255,.95)";
+  context.lineWidth=settings.highContrast?2.4:2;
+  context.lineCap="round";
+  context.lineJoin="round";
+  for(const rawPart of layer._parts){
+    const part=reverse ? [...rawPart].reverse() : rawPart;
+    let remaining=spacing/2;
+    for(let index=1;index<part.length;index++){
+      const start=part[index-1],end=part[index];
+      const dx=end.x-start.x,dy=end.y-start.y,length=Math.hypot(dx,dy);
+      if(length<1) continue;
+      const ux=dx/length,uy=dy/length;
+      while(remaining<=length){
+        const x=start.x+ux*remaining,y=start.y+uy*remaining;
+        const backX=x-ux*size,backY=y-uy*size;
+        context.beginPath();
+        context.moveTo(backX-uy*size*.65,backY+ux*size*.65);
+        context.lineTo(x,y);
+        context.lineTo(backX+uy*size*.65,backY-ux*size*.65);
+        context.stroke();
+        remaining+=spacing;
+      }
+      remaining-=length;
+    }
+  }
+  context.restore();
+};
 
 L.control.zoom({position:"bottomright"}).addTo(map);
 L.control.scale({position:"bottomleft",metric:true,imperial:false,maxWidth:120}).addTo(map);
@@ -1114,8 +1109,7 @@ document.getElementById("settingsBtn").onclick=()=>{
   document.getElementById("themeMode").value=settings.theme||"system";
   document.getElementById("drawer").classList.add("open");
 };
-document.getElementById("closeSettings").onclick=()=>document.getElementById("drawer").classList.remove("open");
-document.getElementById("saveSettings").onclick=()=>{
+document.getElementById("closeSettings").onclick=()=>{
   settings.showUnrated=document.getElementById("showUnrated").checked;
   settings.showRoutes=document.getElementById("showRoutes").checked;
   settings.showTrailDirection=document.getElementById("showTrailDirection").checked;
