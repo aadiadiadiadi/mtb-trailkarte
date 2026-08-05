@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.3.2">
+<meta name="app-version" content="2.4.0">
 <style>
 :root{
   --panel:#fff;
@@ -149,6 +149,7 @@ select,input{background:var(--panel);border-color:var(--border)}
   <div class="section">
     <div class="row"><label for="showUnrated">Unbewertete Trails anzeigen</label><input id="showUnrated" type="checkbox"></div>
     <div class="row"><label for="showRoutes">MTB-Routen anzeigen</label><input id="showRoutes" type="checkbox"></div>
+    <div class="row"><label for="showTrailDirection">Trail-Richtung anzeigen</label><input id="showTrailDirection" type="checkbox"></div>
     <div class="row"><label for="highContrast">Hoher Kontrast</label><input id="highContrast" type="checkbox"></div>
     <div class="row"><label for="followLocation">Standort folgen</label><input id="followLocation" type="checkbox"></div>
     <div class="row"><label for="themeMode">Darstellung</label>
@@ -218,6 +219,7 @@ const DEFAULT_SETTINGS={
   },
   showUnrated:false,
   showRoutes:false,
+  showTrailDirection:true,
   highContrast:true,
   followLocation:false,
   theme:"system"
@@ -227,6 +229,7 @@ settings.enabled=Object.assign({},DEFAULT_SETTINGS.enabled,settings.enabled||{})
 settings.maxByTag=Object.assign({},DEFAULT_SETTINGS.maxByTag,settings.maxByTag||{});
 if(typeof settings.showUnrated!=="boolean") settings.showUnrated=false;
 if(typeof settings.showRoutes!=="boolean") settings.showRoutes=false;
+if(typeof settings.showTrailDirection!=="boolean") settings.showTrailDirection=true;
 
 
 function applyTheme(mode){
@@ -278,7 +281,48 @@ const outlineRenderer=L.canvas({
   padding:0.25,
   tolerance:0
 });
-const trailRenderer=L.canvas({
+const DirectionCanvas=L.Canvas.extend({
+  _updatePoly(layer,closed){
+    L.Canvas.prototype._updatePoly.call(this,layer,closed);
+    if(!this._drawing || closed || !settings.showTrailDirection || !passesFilter(layer.feature?.properties||{})) return;
+    this._drawDirectionChevrons(layer);
+  },
+  _drawDirectionChevrons(layer){
+    const context=this._ctx;
+    if(!context || !layer._parts) return;
+    const properties=layer.feature?.properties||{};
+    const reverse=["-1","reverse"].includes(String(properties.oneway||properties["oneway:bicycle"]||"").toLowerCase());
+    const spacing=56,size=7;
+    context.save();
+    context.strokeStyle="rgba(255,255,255,.95)";
+    context.lineWidth=settings.highContrast?2.4:2;
+    context.lineCap="round";
+    context.lineJoin="round";
+    for(const rawPart of layer._parts){
+      const part=reverse ? [...rawPart].reverse() : rawPart;
+      let remaining=spacing/2;
+      for(let index=1;index<part.length;index++){
+        const start=part[index-1],end=part[index];
+        const dx=end.x-start.x,dy=end.y-start.y,length=Math.hypot(dx,dy);
+        if(length<1) continue;
+        const ux=dx/length,uy=dy/length;
+        while(remaining<=length){
+          const x=start.x+ux*remaining,y=start.y+uy*remaining;
+          const backX=x-ux*size,backY=y-uy*size;
+          context.beginPath();
+          context.moveTo(backX-uy*size*.65,backY+ux*size*.65);
+          context.lineTo(x,y);
+          context.lineTo(backX+uy*size*.65,backY-ux*size*.65);
+          context.stroke();
+          remaining+=spacing;
+        }
+        remaining-=length;
+      }
+    }
+    context.restore();
+  }
+});
+const trailRenderer=new DirectionCanvas({
   pane:"trailPane",
   padding:0.25,
   tolerance:12
@@ -1064,6 +1108,7 @@ document.getElementById("settingsBtn").onclick=()=>{
   renderPriority();
   document.getElementById("showUnrated").checked=settings.showUnrated;
   document.getElementById("showRoutes").checked=settings.showRoutes;
+  document.getElementById("showTrailDirection").checked=settings.showTrailDirection;
   document.getElementById("highContrast").checked=settings.highContrast;
   document.getElementById("followLocation").checked=settings.followLocation;
   document.getElementById("themeMode").value=settings.theme||"system";
@@ -1073,6 +1118,7 @@ document.getElementById("closeSettings").onclick=()=>document.getElementById("dr
 document.getElementById("saveSettings").onclick=()=>{
   settings.showUnrated=document.getElementById("showUnrated").checked;
   settings.showRoutes=document.getElementById("showRoutes").checked;
+  settings.showTrailDirection=document.getElementById("showTrailDirection").checked;
   settings.highContrast=document.getElementById("highContrast").checked;
   settings.followLocation=document.getElementById("followLocation").checked;
   settings.theme=document.getElementById("themeMode").value;
