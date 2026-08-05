@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.3.0">
+<meta name="app-version" content="2.3.2">
 <style>
 :root{
   --panel:#fff;
@@ -38,7 +38,9 @@ button,input,select{font:inherit}
   min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center;
 }
 .iconbtn{font-size:22px;cursor:pointer}
-.northbtn{font-weight:800;transition:transform .15s ease}
+.northbtn{font-weight:800;transition:transform .15s ease;flex-direction:column;gap:0;line-height:.72}
+.northbtn .north-label{font-size:12px;letter-spacing:.04em}
+.northbtn .north-arrow{font-size:24px}
 .sheet-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .sheet-title h3{margin:0}
 .sheet-close{border:0;background:#e5e7eb;border-radius:999px;width:36px;height:36px;font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
@@ -50,7 +52,7 @@ button,input,select{font:inherit}
 .basemap button{border:0;background:transparent;padding:8px 10px;border-radius:9px;cursor:pointer}
 .basemap button.active{background:var(--panel-2);font-weight:700}
 .fabstack{position:fixed;right:10px;top:74px;z-index:1000;display:flex;flex-direction:column;gap:8px}
-.legend{position:fixed;left:10px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:1000;max-width:min(310px,calc(100vw - 86px));padding:10px}
+.legend{position:fixed;left:10px;bottom:calc(48px + env(safe-area-inset-bottom));z-index:1000;max-width:min(310px,calc(100vw - 86px));padding:10px}
 .legend.hidden .legend-body{display:none}
 .legend-head{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:700}
 .legend-row{display:flex;align-items:center;gap:8px;margin-top:6px}
@@ -101,6 +103,8 @@ html[data-theme="dark"] .leaflet-popup-content-wrapper,
 html[data-theme="dark"] .leaflet-popup-tip{
   background:var(--panel);color:var(--text)
 }
+.leaflet-control-scale{margin-left:10px!important;margin-bottom:calc(10px + env(safe-area-inset-bottom))!important}
+.leaflet-control-scale-line{background:var(--panel);color:var(--text);border-color:var(--text);border-top:0;font-weight:700;text-shadow:none;box-shadow:var(--shadow)}
 select,input,button{color:var(--text)}
 select,input{background:var(--panel);border-color:var(--border)}
 @media (max-width:560px){.legend{font-size:13px}.basemap{bottom:calc(70px + env(safe-area-inset-bottom))}}
@@ -117,7 +121,7 @@ select,input{background:var(--panel);border-color:var(--border)}
 
 <div class="fabstack">
   <button id="locateBtn" class="control iconbtn" aria-label="Standort">◎</button>
-  <button id="northBtn" class="control iconbtn northbtn" aria-label="Nach Norden ausrichten" title="Nach Norden ausrichten">↑</button>
+  <button id="northBtn" class="control iconbtn northbtn" aria-label="Nach Norden ausrichten" title="Nach Norden ausrichten"><span class="north-label">N</span><span class="north-arrow" aria-hidden="true">↑</span></button>
   <button id="nearestBtn" class="control iconbtn" aria-label="Nächster Trail">↝</button>
   <button id="gpxBtn" class="control iconbtn" aria-label="GPX importieren">＋</button>
   <input id="gpxInput" type="file" accept=".gpx,application/gpx+xml" hidden>
@@ -281,6 +285,7 @@ const trailRenderer=L.canvas({
 });
 
 L.control.zoom({position:"bottomright"}).addTo(map);
+L.control.scale({position:"bottomleft",metric:true,imperial:false,maxWidth:120}).addTo(map);
 const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
   maxZoom:19,
   attribution:"© OpenStreetMap-Mitwirkende",
@@ -371,7 +376,7 @@ function styleOutline(f){
   return {color:"#ffffff",weight:settings.highContrast?7:5,opacity:passesFilter(p)?0.85:0,smoothFactor:1.5};
 }
 
-function popupHtml(p,{hideLegacyElevation=false}={}){
+function popupHtml(p,{hideLegacyElevation=false,showPreparedLength=false}={}){
   const name=p.name||p["mtb:name"]||"Unbenannter Trail";
   const tags=["mtb:scale","mtb:scale:imba","mtb:scale:uphill"];
   let rows=`<div class="sheet-title"><h3>${escapeHtml(name)}</h3><button id="sheetCloseBtn" class="sheet-close" aria-label="Details schliessen">×</button></div><div class="sheet-grid">`;
@@ -390,6 +395,9 @@ function popupHtml(p,{hideLegacyElevation=false}={}){
     rows+=`<div>Max. Gefälle</div><div>${down} <span class="small">(Geländemodell)</span></div>`;
   }else{
     rows+=`<div>Steigung</div><div><span class="small">Keine Steigungsangabe vorhanden</span></div>`;
+  }
+  if(showPreparedLength){
+    rows+=`<div>Trail-Länge</div><div id="trailLengthValue"><span class="small">Wird geladen…</span></div>`;
   }
 
   if(!hideLegacyElevation &&
@@ -454,11 +462,9 @@ function loadElevationProfiles(){
 
 function elevationMetricsHtml(profile){
   const value=(key,suffix="")=>Number.isFinite(Number(profile[key])) ? `${escapeHtml(String(profile[key]))}${suffix}` : "–";
-  const length=formatTrailLength(profile.elevation_length_m);
   return `<div class="sheet-grid">
-    <div>Trail-Länge</div><div>${escapeHtml(length)}</div>
-    <div>Höchster Punkt</div><div>${value("elevation_max_m"," m ü. M.")}</div>
-    <div>Tiefster Punkt</div><div>${value("elevation_min_m"," m ü. M.")}</div>
+    <div>Startpunkt</div><div>${value("elevation_start_m"," m ü. M.")}</div>
+    <div>Endpunkt</div><div>${value("elevation_end_m"," m ü. M.")}</div>
     <div>Höhendifferenz</div><div>${value("elevation_difference_m"," m")}</div>
     <div>Aufstieg</div><div>${value("elevation_gain_m"," m")}</div>
     <div>Abstieg</div><div>${value("elevation_loss_m"," m")}</div>
@@ -531,6 +537,8 @@ async function renderElevationPoc(feature,requestId){
       currentTarget.innerHTML='<span class="small">Kein vorbereitetes Profil gefunden</span>';
       return;
     }
+    const lengthTarget=document.getElementById("trailLengthValue");
+    if(lengthTarget) lengthTarget.textContent=formatTrailLength(profile.elevation_length_m);
     currentTarget.innerHTML=elevationMetricsHtml(profile);
     installElevationToggle(profile);
   }catch{
@@ -556,7 +564,7 @@ function selectFeature(layer,f){
   const sheet=document.getElementById("sheet");
   const isElevationPoc=isElevationPocFeature(f);
   const elevationId=elevationFeatureId(f);
-  sheet.innerHTML=popupHtml(f.properties||{},{hideLegacyElevation:isElevationPoc});
+  sheet.innerHTML=popupHtml(f.properties||{},{hideLegacyElevation:isElevationPoc,showPreparedLength:isElevationPoc});
   if(isElevationPoc){
     sheet.innerHTML+=`<div class="elevation-poc"><strong>Höhenangaben</strong><div id="elevationPocContent" class="small" style="margin-top:8px">Lade vorbereitetes Höhenprofil…</div></div>`;
   }
