@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.2.8">
+<meta name="app-version" content="2.3.0">
 <style>
 :root{
   --panel:#fff;
@@ -238,39 +238,13 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()
 
 const GUETSCHWALD=[47.05012,8.29021];
 const START_ZOOM=16;
-// Exakt die IDs, für die elevation-profiles.json vorberechnete Daten enthält.
-// Die kleine lokale Menge verhindert jeden Profil-Request bei normalen Trails.
-const ELEVATION_POC_IDS=new Set([
-  "way/107631848","way/107631935","way/113983306","way/1225944161",
-  "way/1307197586","way/1307197587","way/1307197588","way/1349559764",
-  "way/1349559765","way/1454901239","way/1454901240","way/161107990",
-  "way/242836006","way/28849185","way/353672248","way/36733828",
-  "way/36733829","way/391792395","way/391792398","way/391792401",
-  "way/391792403","way/391792406","way/391792412","way/391792415",
-  "way/391792417","way/391792420","way/393243515","way/393243516",
-  "way/397715274","way/447742198","way/447742200","way/45031057",
-  "way/45031138","way/473421088","way/473421089","way/473421090",
-  "way/473421091","way/473421092","way/473421093","way/49302765",
-  "way/51355989","way/519908627","way/519908628","way/519908629",
-  "way/519908630","way/551249129","way/551249130","way/551249131",
-  "way/625226075","way/625706910","way/625727604","way/626121010",
-  "way/626121012","way/626600735","way/626614951","way/626614952",
-  "way/627098237","way/627777423","way/627777424","way/627778480",
-  "way/628752641","way/629167955","way/630494795","way/630879880",
-  "way/630879881","way/631513281","way/631513282","way/631861926",
-  "way/631879799","way/631879800","way/631879801","way/632106080",
-  "way/632136761","way/632221340","way/632221343","way/632545890",
-  "way/632549228","way/632554925","way/633224751","way/633224754",
-  "way/633236987","way/633247225","way/633594184","way/633594185",
-  "way/633594186","way/633635377","way/633836370","way/633836371",
-  "way/634113054","way/634685819","way/634685820","way/639943686",
-  "way/639943687","way/639943688","way/73160715","way/73160745",
-  "way/73336176","way/73336177","way/73336189","way/73336224",
-  "way/73541363","way/73541365","way/73541366","way/73541367",
-  "way/73541576","way/74947255","way/75650816","way/75650818",
-  "way/75650819","way/75650820","way/75650821","way/785518095",
-  "way/800112131","way/87232823"
-]);
+// Dieselben lokalen Gebietsregeln wie im Berechnungsskript. Dadurch ist beim
+// App-Start weder eine Profilanfrage noch eine große statische ID-Liste nötig.
+const ELEVATION_AREAS=[
+  {center:[8.29021,47.05012],radiusM:1200},
+  {center:[8.30931,47.05017],radiusM:15000},
+  {center:[7.29400,46.18300],radiusM:15000}
+];
 let elevationProfilesPromise=null;
 
 const map=L.map("map",{
@@ -444,8 +418,26 @@ function elevationFeatureId(feature){
   return String(feature?.id||feature?.properties?.["@id"]||"");
 }
 
+function featureNearElevationArea(feature,area){
+  const geometry=feature?.geometry||{};
+  if(geometry.type!=="LineString") return false;
+  const coordinates=geometry.coordinates||[];
+  const scaleX=111320*Math.cos(area.center[1]*Math.PI/180);
+  const distanceToSegment=(a,b)=>{
+    const ax=(a[0]-area.center[0])*scaleX, ay=(a[1]-area.center[1])*110540;
+    const bx=(b[0]-area.center[0])*scaleX, by=(b[1]-area.center[1])*110540;
+    const dx=bx-ax,dy=by-ay,denominator=dx*dx+dy*dy;
+    const t=denominator===0 ? 0 : Math.max(0,Math.min(1,-(ax*dx+ay*dy)/denominator));
+    return Math.hypot(ax+t*dx,ay+t*dy);
+  };
+  return coordinates.slice(1).some((coordinate,index)=>distanceToSegment(coordinates[index],coordinate)<=area.radiusM);
+}
+
 function isElevationPocFeature(feature){
-  return ELEVATION_POC_IDS.has(elevationFeatureId(feature));
+  const properties=feature?.properties||{};
+  const isGigeliwald=properties.route_name==="Gigeliwald Trail" || (properties.mtb_route_names||[]).includes("Gigeliwald Trail");
+  const isRated=["mtb:scale","mtb:scale:imba","mtb:scale:uphill"].some(tag=>properties[tag]!==undefined && String(properties[tag]).trim()!=="");
+  return isGigeliwald || (isRated && ELEVATION_AREAS.some(area=>featureNearElevationArea(feature,area)));
 }
 
 function loadElevationProfiles(){
