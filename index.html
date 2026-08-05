@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.2.4">
+<meta name="app-version" content="2.2.6">
 <style>
 :root{
   --panel:#fff;
@@ -449,7 +449,9 @@ function loadElevationProfiles(){
 
 function elevationMetricsHtml(profile){
   const value=(key,suffix="")=>Number.isFinite(Number(profile[key])) ? `${escapeHtml(String(profile[key]))}${suffix}` : "–";
+  const length=formatTrailLength(profile.elevation_length_m);
   return `<div class="sheet-grid">
+    <div>Trail-Länge</div><div>${escapeHtml(length)}</div>
     <div>Höchster Punkt</div><div>${value("elevation_max_m"," m ü. M.")}</div>
     <div>Tiefster Punkt</div><div>${value("elevation_min_m"," m ü. M.")}</div>
     <div>Höhendifferenz</div><div>${value("elevation_difference_m"," m")}</div>
@@ -460,6 +462,13 @@ function elevationMetricsHtml(profile){
   </div>
   <button id="elevationProfileToggle" class="elevation-profile-toggle" type="button" aria-expanded="false">▶ Höhenprofil</button>
   <div id="elevationProfileChart" hidden></div>`;
+}
+
+function formatTrailLength(meters){
+  const value=Number(meters);
+  if(!Number.isFinite(value)||value<0) return "–";
+  if(value>=1000) return `${(value/1000).toLocaleString("de-CH",{minimumFractionDigits:1,maximumFractionDigits:1})} km`;
+  return `${Math.round(value).toLocaleString("de-CH")} m`;
 }
 
 function elevationChartSvg(profile){
@@ -479,7 +488,7 @@ function elevationChartSvg(profile){
   const line=points.map(point=>`${x(point[0]).toFixed(1)},${y(point[1]).toFixed(1)}`).join(" ");
   const baseline=height-padBottom;
   const area=`${padX},${baseline} ${line} ${width-padX},${baseline}`;
-  const distanceLabel=maxDistance>=1000 ? `${(maxDistance/1000).toFixed(1)} km` : `${Math.round(maxDistance)} m`;
+  const distanceLabel=formatTrailLength(maxDistance);
   return `<svg class="elevation-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Höhenprofil von ${Math.round(minElevation)} bis ${Math.round(maxElevation)} Metern">
     <line class="axis" x1="${padX}" y1="${baseline}" x2="${width-padX}" y2="${baseline}"></line>
     <polygon class="area" points="${area}"></polygon>
