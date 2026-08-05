@@ -1,0 +1,31 @@
+{
+  "selected": 1050,
+  "already_present": 114,
+  "attempted": 936,
+  "completed_total": 1050,
+  "failed": 0,
+  "spacing_m": 20.0,
+  "areas": {
+    "luzern": {
+      "center": [
+        8.30931,
+        47.05017
+      ],
+      "radius_m": 15000.0
+    },
+    "haute-nendaz": {
+      "center": [
+        7.294,
+        46.183
+      ],
+      "radius_m": 15000.0
+    }
+  },
+  "area_counts": {
+    "luzern": 633,
+    "haute-nendaz": 417
+  },
+  "duration_seconds": 1939.9,
+  "failures": [],
+  "note": "Auswahl nach Distanz zur Liniengeometrie; verarbeitet werden nur MTB-bewertete LineStrings."
+}
