@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.2.3">
+<meta name="app-version" content="2.2.4">
 <style>
 :root{
   --panel:#fff;
@@ -72,6 +72,13 @@ button,input,select{font:inherit}
 .sheet.open{transform:translateY(0)}
 .sheet h3{margin:0 0 8px}
 .sheet-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}
+.elevation-poc{border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
+.elevation-profile-toggle{width:100%;margin-top:10px;padding:10px 0;border:0;background:transparent;color:var(--text);font-weight:700;text-align:left;cursor:pointer}
+.elevation-chart{display:block;width:100%;height:auto;max-height:170px;margin-top:4px}
+.elevation-chart .area{fill:var(--accent);fill-opacity:.22}
+.elevation-chart .line{fill:none;stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke}
+.elevation-chart .axis{stroke:var(--border);stroke-width:1;vector-effect:non-scaling-stroke}
+.elevation-chart text{fill:var(--muted);font:11px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2ff;margin:2px 4px 2px 0}
 .notice{position:fixed;left:50%;top:78px;transform:translateX(-50%);z-index:2500;background:#111827;color:white;padding:10px 14px;border-radius:10px;box-shadow:var(--shadow);display:none;max-width:90vw}
 .search-results{position:fixed;top:64px;left:10px;right:110px;z-index:1700;background:var(--panel);box-shadow:var(--shadow);border-radius:12px;max-height:45vh;overflow:auto;display:none}
@@ -231,6 +238,10 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()
 
 const GUETSCHWALD=[47.05012,8.29021];
 const START_ZOOM=16;
+const ELEVATION_POC_CENTER={lat:47.05012,lng:8.29021};
+const ELEVATION_POC_RADIUS_M=1200;
+const ELEVATION_POC_ROUTE="Gigeliwald Trail";
+let elevationProfilesPromise=null;
 
 const map=L.map("map",{
   zoomControl:false,
@@ -356,7 +367,7 @@ function styleOutline(f){
   return {color:"#ffffff",weight:settings.highContrast?7:5,opacity:passesFilter(p)?0.85:0,smoothFactor:1.5};
 }
 
-function popupHtml(p){
+function popupHtml(p,{hideLegacyElevation=false}={}){
   const name=p.name||p["mtb:name"]||"Unbenannter Trail";
   const tags=["mtb:scale","mtb:scale:imba","mtb:scale:uphill"];
   let rows=`<div class="sheet-title"><h3>${escapeHtml(name)}</h3><button id="sheetCloseBtn" class="sheet-close" aria-label="Details schliessen">×</button></div><div class="sheet-grid">`;
@@ -377,7 +388,7 @@ function popupHtml(p){
     rows+=`<div>Steigung</div><div><span class="small">Keine Steigungsangabe vorhanden</span></div>`;
   }
 
-  if(
+  if(!hideLegacyElevation &&
     p.elevation_higher_m!==undefined &&
     p.elevation_lower_m!==undefined &&
     p.elevation_difference_m!==undefined
@@ -386,11 +397,11 @@ function popupHtml(p){
     rows+=`<div>Tieferer Punkt</div><div>${escapeHtml(String(p.elevation_lower_m))} m ü. M.</div>`;
     rows+=`<div>Höhendifferenz</div><div>${escapeHtml(String(p.elevation_difference_m))} m</div>`;
     rows+=`<div>Höhenquelle</div><div>${escapeHtml(p.elevation_source||"swisstopo")}</div>`;
-  }else if(p.elevation_status==="outside_switzerland"){
+  }else if(!hideLegacyElevation && p.elevation_status==="outside_switzerland"){
     rows+=`<div>Höhenangaben</div><div><span class="small">Trail liegt ausserhalb der Schweiz</span></div>`;
-  }else if(p.elevation_status==="no_swiss_segment"){
+  }else if(!hideLegacyElevation && p.elevation_status==="no_swiss_segment"){
     rows+=`<div>Höhenangaben</div><div><span class="small">Kein auswertbarer Schweizer Abschnitt</span></div>`;
-  }else{
+  }else if(!hideLegacyElevation){
     rows+=`<div>Höhenangaben</div><div><span class="small">Noch nicht berechnet</span></div>`;
   }
 
@@ -398,6 +409,123 @@ function popupHtml(p){
   return rows;
 }
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
+
+function elevationFeatureId(feature){
+  return String(feature?.id||feature?.properties?.["@id"]||"");
+}
+
+function isElevationPocFeature(feature){
+  const p=feature?.properties||{};
+  if(p.route_name===ELEVATION_POC_ROUTE || (p.mtb_route_names||[]).includes(ELEVATION_POC_ROUTE)) return true;
+  if(!["mtb:scale","mtb:scale:imba","mtb:scale:uphill"].some(tag=>p[tag]!==undefined && p[tag]!==null && String(p[tag]).trim()!=="")) return false;
+  const coordinates=feature?.geometry?.type==="LineString" ? feature.geometry.coordinates : [];
+  if(!coordinates.length) return false;
+  const center=ELEVATION_POC_CENTER;
+  const scaleX=111320*Math.cos(center.lat*Math.PI/180);
+  const distanceToSegment=(a,b)=>{
+    const ax=(a[0]-center.lng)*scaleX, ay=(a[1]-center.lat)*110540;
+    const bx=(b[0]-center.lng)*scaleX, by=(b[1]-center.lat)*110540;
+    const dx=bx-ax, dy=by-ay, denominator=dx*dx+dy*dy;
+    const t=denominator===0 ? 0 : Math.max(0,Math.min(1,-(ax*dx+ay*dy)/denominator));
+    return Math.hypot(ax+t*dx,ay+t*dy);
+  };
+  if(coordinates.length===1){
+    return haversine(center,{lat:coordinates[0][1],lng:coordinates[0][0]})<=ELEVATION_POC_RADIUS_M;
+  }
+  return coordinates.slice(1).some((point,index)=>distanceToSegment(coordinates[index],point)<=ELEVATION_POC_RADIUS_M);
+}
+
+function loadElevationProfiles(){
+  if(!elevationProfilesPromise){
+    elevationProfilesPromise=fetch("poc-output/elevation-profiles.json")
+      .then(response=>{
+        if(!response.ok) throw new Error("Höhenprofile konnten nicht geladen werden");
+        return response.json();
+      })
+      .then(document=>document.features||{});
+  }
+  return elevationProfilesPromise;
+}
+
+function elevationMetricsHtml(profile){
+  const value=(key,suffix="")=>Number.isFinite(Number(profile[key])) ? `${escapeHtml(String(profile[key]))}${suffix}` : "–";
+  return `<div class="sheet-grid">
+    <div>Höchster Punkt</div><div>${value("elevation_max_m"," m ü. M.")}</div>
+    <div>Tiefster Punkt</div><div>${value("elevation_min_m"," m ü. M.")}</div>
+    <div>Höhendifferenz</div><div>${value("elevation_difference_m"," m")}</div>
+    <div>Aufstieg</div><div>${value("elevation_gain_m"," m")}</div>
+    <div>Abstieg</div><div>${value("elevation_loss_m"," m")}</div>
+    <div>Max. Steigung</div><div>${value("max_uphill_percent"," %")}</div>
+    <div>Max. Gefälle</div><div>${value("max_downhill_percent"," %")}</div>
+  </div>
+  <button id="elevationProfileToggle" class="elevation-profile-toggle" type="button" aria-expanded="false">▶ Höhenprofil</button>
+  <div id="elevationProfileChart" hidden></div>`;
+}
+
+function elevationChartSvg(profile){
+  const points=(profile.elevation_profile||[])
+    .map(point=>[Number(point?.[0]),Number(point?.[1])])
+    .filter(point=>Number.isFinite(point[0])&&Number.isFinite(point[1]));
+  if(points.length<2) return '<div class="small">Kein darstellbares Höhenprofil vorhanden</div>';
+  const width=600,height=170,padX=38,padTop=14,padBottom=28;
+  const minDistance=Math.min(...points.map(point=>point[0]));
+  const maxDistance=Math.max(...points.map(point=>point[0]));
+  const minElevation=Math.min(...points.map(point=>point[1]));
+  const maxElevation=Math.max(...points.map(point=>point[1]));
+  const distanceRange=Math.max(1,maxDistance-minDistance);
+  const elevationRange=Math.max(1,maxElevation-minElevation);
+  const x=distance=>padX+(distance-minDistance)/distanceRange*(width-padX*2);
+  const y=elevation=>padTop+(maxElevation-elevation)/elevationRange*(height-padTop-padBottom);
+  const line=points.map(point=>`${x(point[0]).toFixed(1)},${y(point[1]).toFixed(1)}`).join(" ");
+  const baseline=height-padBottom;
+  const area=`${padX},${baseline} ${line} ${width-padX},${baseline}`;
+  const distanceLabel=maxDistance>=1000 ? `${(maxDistance/1000).toFixed(1)} km` : `${Math.round(maxDistance)} m`;
+  return `<svg class="elevation-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Höhenprofil von ${Math.round(minElevation)} bis ${Math.round(maxElevation)} Metern">
+    <line class="axis" x1="${padX}" y1="${baseline}" x2="${width-padX}" y2="${baseline}"></line>
+    <polygon class="area" points="${area}"></polygon>
+    <polyline class="line" points="${line}"></polyline>
+    <text x="2" y="${padTop+4}">${Math.round(maxElevation)} m</text>
+    <text x="2" y="${baseline}">${Math.round(minElevation)} m</text>
+    <text x="${padX}" y="${height-6}">0</text>
+    <text x="${width-padX}" y="${height-6}" text-anchor="end">${distanceLabel}</text>
+  </svg>`;
+}
+
+function installElevationToggle(profile){
+  const toggle=document.getElementById("elevationProfileToggle");
+  const chart=document.getElementById("elevationProfileChart");
+  if(!toggle||!chart) return;
+  toggle.onclick=()=>{
+    const expanded=toggle.getAttribute("aria-expanded")==="true";
+    toggle.setAttribute("aria-expanded",String(!expanded));
+    toggle.textContent=expanded ? "▶ Höhenprofil" : "▼ Höhenprofil";
+    chart.hidden=expanded;
+    if(!expanded && !chart.hasChildNodes()) chart.innerHTML=elevationChartSvg(profile);
+  };
+}
+
+async function renderElevationPoc(feature,requestId){
+  const target=document.getElementById("elevationPocContent");
+  if(!target) return;
+  try{
+    const profiles=await loadElevationProfiles();
+    if(elevationFeatureId(feature)!==requestId || selectedLayer?.feature!==feature) return;
+    const currentTarget=document.getElementById("elevationPocContent");
+    if(!currentTarget) return;
+    const profile=profiles[requestId];
+    if(!profile){
+      currentTarget.innerHTML='<span class="small">Kein vorbereitetes Profil gefunden</span>';
+      return;
+    }
+    currentTarget.innerHTML=elevationMetricsHtml(profile);
+    installElevationToggle(profile);
+  }catch{
+    const currentTarget=document.getElementById("elevationPocContent");
+    if(currentTarget && selectedLayer?.feature===feature){
+      currentTarget.innerHTML='<span class="small">Höhenprofil konnte nicht geladen werden</span>';
+    }
+  }
+}
 
 function closeSheet(){
   document.getElementById("sheet").classList.remove("open");
@@ -412,11 +540,17 @@ function selectFeature(layer,f){
   layer.setStyle({weight:8,color:"#fde047",opacity:1});
   layer.bringToFront();
   const sheet=document.getElementById("sheet");
-  sheet.innerHTML=popupHtml(f.properties||{});
+  const isElevationPoc=isElevationPocFeature(f);
+  const elevationId=elevationFeatureId(f);
+  sheet.innerHTML=popupHtml(f.properties||{},{hideLegacyElevation:isElevationPoc});
+  if(isElevationPoc){
+    sheet.innerHTML+=`<div class="elevation-poc"><strong>Höhenangaben</strong><div id="elevationPocContent" class="small" style="margin-top:8px">Lade vorbereitetes Höhenprofil…</div></div>`;
+  }
   sheet.classList.add("open");
   setTimeout(()=>{
     const closeBtn=document.getElementById("sheetCloseBtn");
     if(closeBtn) closeBtn.onclick=closeSheet;
+    if(isElevationPoc) renderElevationPoc(f,elevationId);
   },0);
 }
 function featureId(f){return (f.id||"")+"|"+((f.properties||{}).name||"")+"|"+JSON.stringify(f.geometry.coordinates[0]||[]).slice(0,80)}

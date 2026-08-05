@@ -1,4 +1,4 @@
-const APP_VERSION = "2.2.3";
+const APP_VERSION = "2.2.4";
 const STATIC_CACHE = `mtb-trailkarte-static-${APP_VERSION}`;
 const DATA_CACHE = `mtb-trailkarte-data-${APP_VERSION}`;
 
@@ -38,6 +38,7 @@ self.addEventListener("fetch", event => {
 
   const isNavigation = event.request.mode === "navigate";
   const isGeoJson = url.pathname.endsWith(".geojson");
+  const isElevationProfile = url.pathname.endsWith("/poc-output/elevation-profiles.json");
   const isMetadata = url.pathname.endsWith("data-meta.json");
 
   if(isNavigation || isMetadata){
@@ -45,7 +46,7 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  if(isGeoJson){
+  if(isGeoJson || isElevationProfile){
     event.respondWith(cacheFirstWithRefresh(event.request, DATA_CACHE));
     return;
   }
