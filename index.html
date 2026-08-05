@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <title>MTB Trailkarte</title>
-<meta name="app-version" content="2.4.1">
+<meta name="app-version" content="2.4.2">
 <style>
 :root{
   --panel:#fff;
@@ -268,11 +268,12 @@ const map=L.map("map",{
 // Sobald ein Standort verfügbar ist, wechselt sie automatisch dorthin.
 map.setView(GUETSCHWALD,START_ZOOM,{animate:false});
 
-map.createPane("trailOutlinePane");
+const rotatingPaneParent=map.getPane("overlayPane").parentElement;
+map.createPane("trailOutlinePane",rotatingPaneParent);
 map.getPane("trailOutlinePane").style.zIndex=410;
 map.getPane("trailOutlinePane").style.pointerEvents="none";
 
-map.createPane("trailPane");
+map.createPane("trailPane",rotatingPaneParent);
 map.getPane("trailPane").style.zIndex=420;
 
 const outlineRenderer=L.canvas({
