@@ -1,0 +1,186 @@
+name: Schweiz-Höhenprofile berechnen
+
+on:
+  workflow_dispatch:
+    inputs:
+      chunk:
+        description: "Welcher Trail-/Profil-Chunk soll verarbeitet werden?"
+        required: true
+        default: "01"
+        type: choice
+        options:
+          - "01"
+          - "02"
+          - "03"
+          - "04"
+          - "05"
+          - "06"
+          - "07"
+          - "08"
+          - "09"
+          - "10"
+      force:
+        description: "Vorhandene Profile neu berechnen"
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: "Nur Auswahl prüfen, keine API-/Dateiaufrufe"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trail-daten-writes
+  cancel-in-progress: false
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      CHUNK: ${{ inputs.chunk }}
+      FORCE: ${{ inputs.force }}
+      DRY_RUN: ${{ inputs.dry_run }}
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Höhenpunktcache laden
+        uses: actions/cache/restore@v4
+        with:
+          path: elevation-cache.sqlite
+          key: mtb-trailkarte-elevation-cache-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            mtb-trailkarte-elevation-cache-v1-
+
+      - name: Höhenprofile berechnen
+        id: calculate
+        run: |
+          ARGS=(--chunk "$CHUNK" --data-dir . --output-dir . --cache elevation-cache.sqlite)
+          if [ "$FORCE" = "true" ]; then
+            ARGS+=(--force)
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          python scripts/berechne_schweiz_profile.py "${ARGS[@]}"
+
+      - name: Höhenpunktcache sichern
+        id: cache_save
+        if: ${{ always() && !cancelled() && inputs.dry_run != true && hashFiles('elevation-cache.sqlite') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: elevation-cache.sqlite
+          key: mtb-trailkarte-elevation-cache-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Cache-Datei prüfen
+        id: cache_file
+        if: ${{ always() && !cancelled() && inputs.dry_run != true }}
+        shell: bash
+        run: |
+          if [ -f elevation-cache.sqlite ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ergebnis prüfen
+        id: changes
+        if: ${{ always() && !cancelled() }}
+        shell: bash
+        run: |
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+          if [ -n "$(git status --porcelain --untracked-files=all -- "trails-${CHUNK}.geojson" "elevation-profiles-${CHUNK}.json" "summary-${CHUNK}.json")" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Profil und Trail-Datei als Artefakt sichern
+        if: ${{ always() && !cancelled() && steps.changes.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hoehenprofile-${CHUNK}
+          path: |
+            trails-${CHUNK}.geojson
+            elevation-profiles-${CHUNK}.json
+            summary-${CHUNK}.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Änderungen committen
+        id: commit_push
+        if: ${{ always() && !cancelled() && steps.changes.outputs.changed == 'true' && inputs.dry_run != true }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for file in "trails-${CHUNK}.geojson" "elevation-profiles-${CHUNK}.json" "summary-${CHUNK}.json"; do
+            if [ -e "$file" ]; then
+              git add -- "$file"
+            fi
+          done
+          if git diff --cached --quiet; then
+            echo "Keine Änderungen vorhanden."
+          else
+            git commit -m "Schweizer Höhenprofile für Chunk ${CHUNK} ergänzen"
+            git push
+          fi
+
+      - name: Commit-Status prüfen
+        id: commit_status
+        if: ${{ always() && !cancelled() }}
+        shell: bash
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain --untracked-files=all -- "trails-${CHUNK}.geojson" "elevation-profiles-${CHUNK}.json" "summary-${CHUNK}.json")" ]; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Berechnungsstatus melden
+        if: ${{ always() && !cancelled() && steps.calculate.outcome == 'failure' }}
+        run: |
+          echo "::error::Die Profilberechnung wurde mit Fehlern beendet; die gespeicherten Checkpoints wurden übernommen."
+          exit 1
+
+      - name: Änderungen vollständig übernommen prüfen
+        if: ${{ always() && !cancelled() && steps.calculate.outcome == 'success' && inputs.dry_run != true && steps.commit_push.outcome == 'success' && steps.changes.outputs.changed == 'true' && steps.cache_save.outcome != 'failure' && steps.cache_file.outputs.present == 'true' }}
+        run: |
+          if [ "${{ steps.commit_status.outputs.clean }}" != "true" ]; then
+            echo "::error::Die berechneten Änderungen konnten nicht vollständig committed werden."
+            exit 1
+          fi
+
+      - name: Berechnung ohne Änderungen abschliessen
+        if: ${{ always() && !cancelled() && steps.calculate.outcome == 'success' && inputs.dry_run != true && steps.changes.outputs.changed == 'false' }}
+        run: echo "Keine neuen Höhenprofile wurden berechnet."
+
+      - name: Commit-Fehler melden
+        if: ${{ always() && !cancelled() && steps.commit_push.outcome == 'failure' && inputs.dry_run != true }}
+        run: |
+          echo "::error::Die berechneten Änderungen konnten nicht gepusht werden."
+          exit 1
+
+      - name: Cache-Fehler melden
+        if: ${{ always() && !cancelled() && inputs.dry_run != true && (steps.cache_save.outcome == 'failure' || steps.cache_file.outputs.present == 'false') }}
+        run: |
+          echo "::error::Der Höhenpunktcache konnte nicht gesichert werden."
+          exit 1
