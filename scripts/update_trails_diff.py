@@ -15,14 +15,11 @@ Vorteile des differentiellen Ansatzes:
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 import datetime as dt
 import hashlib
 import json
 import math
-import os
 import sys
-import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -32,22 +29,13 @@ try:
 except ImportError:
     osmium = None
 
-try:
-    import requests
-except ImportError:
-    requests = None
-
 MTB_KEYS = ("mtb:scale", "mtb:scale:imba", "mtb:scale:uphill")
-PROFILE_URL = "https://api3.geo.admin.ch/rest/services/profile.json"
-HEIGHT_URL = "https://api3.geo.admin.ch/rest/services/height"
-USER_AGENT = os.environ.get("MTB_USER_AGENT", "mtb-trailkarte-diff-updater/2.0")
 APP_VERSION = "2.4.2"
 
 # Attribute, die durch Vorverarbeitung/Berechnung hinzukommen und bei Tag-Updates
 # nicht von OSM überschrieben werden dürfen
 ENRICHED_PROP_KEYS = {
-    "incline",
-    "incline_avg_percent",
+        "incline_avg_percent",
     "incline_max_percent",
     "incline_source",
     "elevation_gain_m",
@@ -57,6 +45,19 @@ ENRICHED_PROP_KEYS = {
     "elevation_difference_m",
     "elevation_source",
     "elevation_status",
+    "elevation_start_m",
+    "elevation_end_m",
+    "elevation_min_m",
+    "elevation_max_m",
+    "average_grade_percent",
+    "max_uphill_percent",
+    "max_downhill_percent",
+    "grade_window_m",
+    "elevation_length_m",
+    "elevation_profile_ref",
+    "elevation_profile_chunk",
+    "elevation_profile_version",
+    "elevation_profile_hash",
 }
 
 
@@ -67,28 +68,6 @@ def utc_now() -> str:
         .isoformat()
         .replace("+00:00", "Z")
     )
-
-
-def wgs84_to_lv95(lon: float, lat: float) -> tuple[float, float]:
-    """Konvertiert WGS84 nach Swiss Grid LV95 (EPSG:2056) ohne externe Abhängigkeit."""
-    phi = (lat * 3600 - 169028.66) / 10000.0
-    lam = (lon * 3600 - 26782.5) / 10000.0
-    e = (
-        2600072.37
-        + 211455.93 * lam
-        - 10938.51 * lam * phi
-        - 0.36 * lam * (phi ** 2)
-        - 44.54 * (lam ** 3)
-    )
-    n = (
-        1200147.07
-        + 308807.95 * phi
-        + 3745.25 * (lam ** 2)
-        + 76.63 * (phi ** 2)
-        - 194.56 * (lam ** 2) * phi
-        + 119.79 * (phi ** 3)
-    )
-    return e, n
 
 
 def geometry_hash(coordinates: list[list[float]]) -> str:
@@ -130,6 +109,31 @@ def load_existing_trails(directory: Path) -> dict[str, dict[str, Any]]:
     return existing
 
 
+def load_existing_chunk_map(directory: Path, chunk_count: int) -> dict[str, int]:
+    """Merkt sich die bisherige Chunk-Zuordnung bestehender OSM-IDs.
+
+    Die Chunk-Dateien dürfen nicht alle nachfolgenden IDs verschieben, wenn ein
+    neuer Trail hinzukommt.
+    Neue IDs werden nach ``((osm_way_id - 1) % chunk_count) + 1`` verteilt;
+    bestehende IDs behalten ihre Datei. So bleiben vorhandene Profil-Dateien
+    auch nach einem differentiellen OSM-Update gültig.
+    """
+    chunk_map: dict[str, int] = {}
+    for index in range(1, chunk_count + 1):
+        path = directory / f"trails-{index:02d}.geojson"
+        if not path.exists():
+            continue
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            for feature in document.get("features", []):
+                fid = feature.get("id") or (feature.get("properties") or {}).get("@id")
+                if fid:
+                    chunk_map[str(fid)] = index
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"Warnung beim Lesen der Chunk-Zuordnung aus {path.name}: {exc}", file=sys.stderr)
+    return chunk_map
+
+
 if osmium is not None:
 
     class OsmRouteCollector(osmium.SimpleHandler):
@@ -162,7 +166,10 @@ if osmium is not None:
         def way(self, way: osmium.osm.Way) -> None:
             tags = dict(way.tags)
             routes = self.way_routes.get(way.id, [])
-            rated = any(str(tags.get(k, "")).strip() for k in MTB_KEYS)
+            rated = any(
+                tags.get(k) is not None and str(tags.get(k, "")).strip()
+                for k in MTB_KEYS
+            )
             if not rated and not routes:
                 return
             coords: list[list[float]] = []
@@ -245,6 +252,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    if args.chunks <= 0:
+        raise SystemExit("Die Chunk-Anzahl muss grösser als 0 sein.")
+
     if osmium is None:
         print(
             "Fehler: Das Python-Paket 'osmium' ist nicht installiert.\n"
@@ -261,6 +271,8 @@ def main() -> None:
     print(f"Lade bestehenden Datenbestand aus {work_dir}...")
     existing_trails = load_existing_trails(work_dir)
     print(f"-> {len(existing_trails)} bestehende Trails geladen.")
+    existing_chunk_map = load_existing_chunk_map(work_dir, args.chunks)
+    print(f"-> {len(existing_chunk_map)} bestehende Chunk-Zuordnungen geladen.")
 
     # Vorbereiten des Geometrie-Hash-Lookups für den Bestand
     existing_geom_hashes: dict[str, str] = {}
@@ -319,13 +331,11 @@ def main() -> None:
             old_ghash = existing_geom_hashes.get(fid)
 
             if old_ghash == ghash:
-                # Geometrie identisch!
-                # Wir vergleichen OSM-relevante Tags
+                # Geometrie identisch: OSM-relevante Tags vergleichen.
                 old_props = old_feat.get("properties", {})
                 new_props = feat["properties"]
 
-                # Prüfen, ob sich OSM-Tags verändert haben
-                # (Wir ignorieren berechnete Attribute)
+                # Berechnete Attribute werden beim Vergleich ignoriert.
                 tags_changed = False
                 for k, v in new_props.items():
                     if k not in ENRICHED_PROP_KEYS and old_props.get(k) != v:
@@ -342,6 +352,10 @@ def main() -> None:
                 for k in ENRICHED_PROP_KEYS:
                     if k in old_props:
                         merged_props[k] = old_props[k]
+                # Ein berechneter DEM-Incline bleibt erhalten, wenn OSM den
+                # Rohwert entfernt; ein neuer OSM-Wert hat dagegen Vorrang.
+                if "incline" not in new_props and "incline" in old_props:
+                    merged_props["incline"] = old_props["incline"]
 
                 # Falls OSM-incline neu gesetzt wurde, hat OSM Vorrang
                 raw_inc = new_props.get("incline")
@@ -366,7 +380,8 @@ def main() -> None:
             else:
                 # Geometrie hat sich geändert!
                 stats["geometry_changed"] += 1
-                # Neue Geometrie übernehmen, alte Höhendaten verwerfen, da Geometrie neu
+                # Neue Geometrie übernehmen. Alte Höhendaten und Profilreferenzen
+                # verwerfen, damit das nächste Profil-Lauf sie neu berechnet.
                 raw_inc = feat["properties"].get("incline")
                 parsed_inc = parse_osm_incline(raw_inc)
                 if parsed_inc is not None:
@@ -401,7 +416,11 @@ def main() -> None:
     rated_count = sum(
         1
         for f in final_features
-        if any(str(f.get("properties", {}).get(k, "")).strip() for k in MTB_KEYS)
+        if any(
+            f.get("properties", {}).get(k) is not None
+            and str(f.get("properties", {}).get(k, "")).strip()
+            for k in MTB_KEYS
+        )
     )
     osm_inc_count = sum(
         1 for f in final_features if f.get("properties", {}).get("incline_source") == "OSM"
@@ -429,16 +448,29 @@ def main() -> None:
         "incline_dem_count": dem_inc_count,
         "incline_pending_count": pending_count,
         "coverage": "Schweiz; grenzüberschreitende Wege vollständig",
-        "elevation_method": "Höhe der beiden Endpunkte des Schweizer Trailabschnitts",
+        "elevation_method": "20-m-Höhenprofil mit 40-m-Fenster für Extremsteigungen",
         "elevation_source": "swisstopo Height Service / swissALTI3D",
     }
     save_json(meta_path, meta, compact=False)
     print(f"data-meta.json aktualisiert.")
 
-    # Aufteilen in Chunks (trails-01..trails-10.geojson)
+    # Aufteilen in Chunks. Bestehende IDs behalten ihren Chunk, damit bereits
+    # berechnete Profile nicht verschoben werden. Neue IDs werden stabil nach
+    # ((osm_way_id - 1) % Chunkanzahl) + 1 verteilt.
     print(f"Schreibe {args.chunks} GeoJSON-Chunk-Dateien...")
+    chunk_features: list[list[dict[str, Any]]] = [[] for _ in range(args.chunks)]
+    for feature in final_features:
+        fid = str(feature.get("id") or (feature.get("properties") or {}).get("@id") or "")
+        osm_way_id = int((feature.get("properties") or {}).get("osm_way_id", 0))
+        chunk_index = existing_chunk_map.get(fid)
+        if chunk_index is None:
+            chunk_index = ((osm_way_id - 1) % args.chunks) + 1
+        if not 1 <= chunk_index <= args.chunks:
+            raise ValueError(f"Ungültige Chunk-Zuordnung für {fid}: {chunk_index}")
+        chunk_features[chunk_index - 1].append(feature)
+
     for index in range(args.chunks):
-        chunk_feats = final_features[index :: args.chunks]
+        chunk_feats = chunk_features[index]
         chunk_data = {
             "type": "FeatureCollection",
             "metadata": {"updated_at": now_iso, "data_version": now_iso},

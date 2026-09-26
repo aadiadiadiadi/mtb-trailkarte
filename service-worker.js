@@ -38,7 +38,7 @@ self.addEventListener("fetch", event => {
 
   const isNavigation = event.request.mode === "navigate";
   const isGeoJson = url.pathname.endsWith(".geojson");
-  const isElevationProfile = url.pathname.endsWith("/poc-output/elevation-profiles.json");
+  const isElevationProfile = /\/elevation-profiles-\d{2}\.json$/.test(url.pathname);
   const isMetadata = url.pathname.endsWith("data-meta.json");
 
   if(isNavigation || isMetadata || isGeoJson){
@@ -77,5 +77,6 @@ async function cacheFirstWithRefresh(request, cacheName){
     return response;
   }).catch(() => null);
 
-  return cached || refresh || new Response("Offline nicht verfügbar", {status:503});
+  if(cached) return cached;
+  return (await refresh) || new Response("Offline nicht verfügbar", {status:503});
 }

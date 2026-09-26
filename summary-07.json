@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "chunk": "07",
+  "source_file": "trails-07.geojson",
+  "spacing_m": 20.0,
+  "selected": 2779,
+  "already_present": 104,
+  "attempted": 2675,
+  "calculated": 2675,
+  "failed": 0,
+  "completed_total": 2779,
+  "stale_removed": 0,
+  "failures": []
+}
