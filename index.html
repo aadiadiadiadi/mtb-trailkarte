@@ -48,14 +48,17 @@ button,input,select{font:inherit}
 .topbar>*{pointer-events:auto}
 .search{flex:1;display:flex;padding:0 10px}
 .search input{width:100%;border:0;outline:0;background:transparent}
-.basemap{position:fixed;right:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:1000;padding:6px;gap:6px}
-.basemap button{border:0;background:transparent;padding:8px 10px;border-radius:9px;cursor:pointer}
+.basemap{display:flex;gap:4px;padding:4px}
+.basemap button{border:0;background:transparent;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13px}
 .basemap button.active{background:var(--panel-2);font-weight:700}
-.fabstack{position:fixed;right:10px;top:74px;z-index:1000;display:flex;flex-direction:column;gap:8px}
+.fabstack{position:fixed;right:10px;top:74px;z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
 .legend{position:fixed;left:10px;bottom:calc(48px + env(safe-area-inset-bottom));z-index:1000;max-width:min(310px,calc(100vw - 86px));padding:10px}
 .legend.hidden .legend-body{display:none}
 .legend-head{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:700}
 .legend-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.legend-group{display:flex;align-items:center;gap:8px;margin-top:8px}
+.legend-group .info-link{margin-left:auto}
+.legend .info-link{border:0;background:var(--panel-2);border-radius:8px;width:20px;height:20px;min-width:20px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:var(--text);font-size:12px;font-weight:700;font-style:italic;flex:0 0 auto}
 .swatch{width:26px;height:5px;border-radius:4px;display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
 .drawer{position:fixed;z-index:2000;top:0;right:0;height:100%;width:min(390px,92vw);background:var(--panel);box-shadow:-4px 0 20px rgba(0,0,0,.25);padding:18px;overflow:auto;transform:translateX(105%);transition:.22s}
 .drawer.open{transform:translateX(0)}
@@ -107,7 +110,7 @@ html[data-theme="dark"] .leaflet-popup-tip{
 .leaflet-control-scale-line{background:var(--panel);color:var(--text);border-color:var(--text);border-top:0;font-weight:700;text-shadow:none;box-shadow:var(--shadow)}
 select,input,button{color:var(--text)}
 select,input{background:var(--panel);border-color:var(--border)}
-@media (max-width:560px){.legend{font-size:13px}.basemap{bottom:calc(70px + env(safe-area-inset-bottom))}}
+@media (max-width:560px){.legend{font-size:13px}}
 </style>
 </head>
 <body>
@@ -120,16 +123,15 @@ select,input{background:var(--panel);border-color:var(--border)}
 <div id="searchResults" class="search-results"></div>
 
 <div class="fabstack">
+  <div class="control basemap">
+    <button id="osmBtn" class="active">Karte</button>
+    <button id="aerialBtn">Luftbild</button>
+  </div>
   <button id="locateBtn" class="control iconbtn" aria-label="Standort">◎</button>
   <button id="northBtn" class="control iconbtn northbtn" aria-label="Nach Norden ausrichten" title="Nach Norden ausrichten"><span class="north-label">N</span><span class="north-arrow" aria-hidden="true">↑</span></button>
   <button id="nearestBtn" class="control iconbtn" aria-label="Nächster Trail">↝</button>
   <button id="gpxBtn" class="control iconbtn" aria-label="GPX importieren">＋</button>
   <input id="gpxInput" type="file" accept=".gpx,application/gpx+xml" hidden>
-</div>
-
-<div class="control basemap">
-  <button id="osmBtn" class="active">Karte</button>
-  <button id="aerialBtn">Luftbild</button>
 </div>
 
 <div id="legend" class="control legend hidden">
@@ -699,14 +701,18 @@ function renderLegend(){
   for(const tag of settings.priority){
     if(!settings.enabled[tag]) continue;
     const cfg=TAGS[tag];
-    html+=`<div style="margin-top:8px"><strong>${cfg.label}</strong></div>`;
+    const doc=TAG_DOCS[tag];
+    const head=doc
+      ? `<div class="legend-group"><strong>${cfg.label}</strong><a class="info-link" href="${doc}" target="_blank" rel="noopener noreferrer" aria-label="Dokumentation zu ${cfg.label}" title="OSM-Dokumentation zu ${cfg.label} öffnen">i</a></div>`
+      : `<div class="legend-group"><strong>${cfg.label}</strong></div>`;
+    html+=head;
     for(const v of cfg.order){
       const label=cfg.names?.[v]||`${cfg.prefix}${v}`;
       html+=`<div class="legend-row"><span class="swatch" style="background:${cfg.colors[v]}"></span><span>${label}</span></div>`;
     }
   }
   if(settings.showUnrated){
-    html+=`<div style="margin-top:8px"><strong>Weitere Trails</strong></div>
+    html+=`<div class="legend-group" style="margin-top:8px"><strong>Weitere Trails</strong></div>
       <div class="legend-row"><span class="swatch" style="background:#9ca3af"></span><span>Unbewertet</span></div>`;
   }
   if(settings.showRoutes){
