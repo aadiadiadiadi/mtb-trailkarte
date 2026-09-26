@@ -1,4 +1,4 @@
-const APP_VERSION = "2.2.6";
+const APP_VERSION = "2.4.2";
 const STATIC_CACHE = `mtb-trailkarte-static-${APP_VERSION}`;
 const DATA_CACHE = `mtb-trailkarte-data-${APP_VERSION}`;
 
@@ -38,15 +38,15 @@ self.addEventListener("fetch", event => {
 
   const isNavigation = event.request.mode === "navigate";
   const isGeoJson = url.pathname.endsWith(".geojson");
-  const isElevationProfile = url.pathname.endsWith("/poc-output/elevation-profiles.json");
+  const isElevationProfile = /\/elevation-profiles-\d{2}\.json$/.test(url.pathname);
   const isMetadata = url.pathname.endsWith("data-meta.json");
 
-  if(isNavigation || isMetadata){
-    event.respondWith(networkFirst(event.request, STATIC_CACHE));
+  if(isNavigation || isMetadata || isGeoJson){
+    event.respondWith(networkFirst(event.request, isGeoJson ? DATA_CACHE : STATIC_CACHE));
     return;
   }
 
-  if(isGeoJson || isElevationProfile){
+  if(isElevationProfile){
     event.respondWith(cacheFirstWithRefresh(event.request, DATA_CACHE));
     return;
   }
@@ -77,5 +77,6 @@ async function cacheFirstWithRefresh(request, cacheName){
     return response;
   }).catch(() => null);
 
-  return cached || refresh || new Response("Offline nicht verfügbar", {status:503});
+  if(cached) return cached;
+  return (await refresh) || new Response("Offline nicht verfügbar", {status:503});
 }

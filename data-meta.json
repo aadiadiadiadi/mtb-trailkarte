@@ -1,9 +1,9 @@
 {
-  "app_version": "2.2.6",
+  "app_version": "2.4.2",
   "data_version": "2026-07-26T17:01:52Z",
   "updated_at": "2026-07-26T17:01:52Z",
   "osm_data_timestamp": null,
-  "source": "OpenStreetMap",
+  "source": "OpenStreetMap (Geofabrik Schweiz) + swisstopo Height Service",
   "trail_count": 47688,
   "route_count": 1099,
   "feature_count": 62766,
@@ -11,6 +11,6 @@
   "incline_dem_count": 0,
   "incline_pending_count": 0,
   "coverage": "Schweiz; grenzüberschreitende Wege vollständig",
-  "elevation_method": "Höhe der beiden Endpunkte des Schweizer Trailabschnitts",
+  "elevation_method": "20-m-Höhenprofil mit 40-m-Fenster für Extremsteigungen",
   "elevation_source": "swisstopo Height Service / swissALTI3D"
 }

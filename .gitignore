@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.sqlite
+*.sqlite-*
+*.tmp
+.cline/
+poc-output/
+*.log
+update_trails.cpython-*.pyc
+status-*.txt
+status-final-*.txt
+*-last.txt
+*-verified.txt
+*-final*.txt
+final-git-*.txt
