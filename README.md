@@ -22,7 +22,7 @@
 - `.github/workflows/update-osm-diff.yml`: differentielles OSM-Update
 - `.github/workflows/schweiz-hoehenprofile.yml`: manuelle Höhenprofil-Berechnung
 
-Die Zuordnung eines Profildatei-Chunks entspricht exakt der gleichnamigen Trail-Datei. Bestehende OSM-IDs behalten ihren bisherigen Chunk, damit bereits berechnete Profile gültig bleiben. Die Berechnung muss vor dem Deployment mindestens einmal für den jeweiligen Chunk gestartet werden.
+Die Zuordnung eines Profildatei-Chunks entspricht exakt der gleichnamigen Trail-Datei. Bestehende OSM-IDs behalten ihren bisherigen Chunk, damit bereits berechnete Profile gültig bleiben. Neue und geometrisch veränderte Trails werden vom differentiellen OSM-Lauf automatisch mitberechnet; der separate Workflow **Schweiz-Höhenprofile berechnen** bleibt für eine bewusste Komplett- oder Teilneuberechnung (z. B. `force`) verfügbar.
 
 ## GitHub-Actions-Workflows
 
@@ -31,6 +31,7 @@ Die Zuordnung eines Profildatei-Chunks entspricht exakt der gleichnamigen Trail-
 1. **Actions → OSM-Traildaten differentiell aktualisieren → Run workflow**
 2. Für einen ersten Test `dry_run` aktivieren.
 3. Ohne Dry-Run werden der aktuelle Geofabrik-Auszug geladen, unveränderte Geometrien und berechnete Attribute beibehalten und nur tatsächlich geänderte Dateien committed.
+4. Neu hinzugekommene und in ihrer Geometrie veränderte Trails werden im selben Lauf automatisch mit Höhen und Höhenprofil versehen. Die Berechnung ist differentiell: Bereits aktuelle Profile werden über den Geometrie-Hash erkannt und übersprungen, der SQLite-Höhenpunktcache verhindert doppelte swisstopo-Abfragen.
 
 ### Schweiz-Höhenprofile berechnen
 

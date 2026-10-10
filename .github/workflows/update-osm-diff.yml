@@ -19,7 +19,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v4
@@ -34,7 +34,16 @@ jobs:
       - name: Abhängigkeiten installieren
         run: |
           python -m pip install --upgrade pip
-          python -m pip install osmium
+          python -m pip install osmium requests
+
+      - name: Höhenpunktcache laden
+        if: inputs.dry_run != true
+        uses: actions/cache/restore@v4
+        with:
+          path: elevation-cache.sqlite
+          key: mtb-trailkarte-elevation-cache-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            mtb-trailkarte-elevation-cache-v1-
 
       - name: Aktuellen Schweizer OSM-Auszug laden
         run: |
@@ -43,6 +52,7 @@ jobs:
             https://download.geofabrik.de/europe/switzerland-latest.osm.pbf
 
       - name: Differentiellen Abgleich ausführen
+        id: diff
         env:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
@@ -56,15 +66,39 @@ jobs:
         if: always()
         run: rm -f switzerland-latest.osm.pbf
 
+      - name: Höhenprofile für neue und geänderte Trails berechnen
+        id: elevation
+        if: ${{ always() && !cancelled() && inputs.dry_run != true && steps.diff.outcome == 'success' }}
+        run: |
+          python scripts/berechne_schweiz_profile.py --chunk alle --data-dir . --output-dir . --cache elevation-cache.sqlite
+
+      - name: Höhenpunktcache sichern
+        id: cache_save
+        if: ${{ always() && !cancelled() && inputs.dry_run != true && (steps.elevation.outcome == 'success' || steps.elevation.outcome == 'failure') && hashFiles('elevation-cache.sqlite') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: elevation-cache.sqlite
+          key: mtb-trailkarte-elevation-cache-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Änderungen committen und pushen
-        if: inputs.dry_run != true
+        id: commit_push
+        if: ${{ always() && !cancelled() && inputs.dry_run != true && steps.diff.outcome == 'success' }}
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add trails-*.geojson data-meta.json
+          shopt -s nullglob
+          files=(trails-*.geojson elevation-profiles-*.json summary-*.json data-meta.json)
+          git add -- "${files[@]}"
           if git diff --cached --quiet; then
             echo "Keine Änderungen vorhanden."
           else
             git commit -m "OSM-Traildaten differentiell aktualisiert"
             git push
           fi
+
+      - name: Höhenberechnungsfehler melden
+        if: ${{ always() && !cancelled() && steps.elevation.outcome == 'failure' }}
+        run: |
+          echo "::error::Die Höhenberechnung neuer Trails wurde mit Fehlern beendet; die bereits berechneten Checkpoints wurden übernommen."
+          exit 1
