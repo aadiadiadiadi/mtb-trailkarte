@@ -109,7 +109,7 @@
                 const x=start.x+ux*remaining,y=start.y+uy*remaining;
                 const backX=x-ux*size,backY=y-uy*size;
                 context.beginPath();
-                context.moveTo(backX-uy*size*.65,backBackY+ux*size*.65);
+                context.moveTo(backX-uy*size*.65,backY+ux*size*.65);
                 context.lineTo(x,y);
                 context.lineTo(backX+uy*size*.65,backY-ux*size*.65);
                 context.stroke();
