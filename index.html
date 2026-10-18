@@ -1,172 +1,492 @@
-function headingIcon(){
-  const mapBearing = typeof map.getBearing === "function" ? map.getBearing() : 0;
-  const headingRotation = Number.isFinite(currentHeading) ? currentHeading - mapBearing : -mapBearing;
-  return L.divIcon({
-    className: "",
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-    html: `<div class="heading-marker" style="transform:rotate(${headingRotation}deg)"><div class="heading-arrow"></div><div class="heading-dot"></div></div>`
-  });
-}
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#1f2937">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <title>MTB Trailkarte</title>
+  <meta name="app-version" content="2.4.2">
+  <style>
+    :root {
+      --panel: #fff;
+      --panel-2: #f3f4f6;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --border: #e5e7eb;
+      --map-bg: #ddd;
+      --shadow: 0 2px 14px rgba(0,0,0,.22);
+    }
+    html[data-theme="dark"] {
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --border: #374151;
+      --map-bg: #0f172a;
+      --shadow: 0 2px 18px rgba(0,0,0,.5);
+    }
+    * { box-sizing: border-box; }
+    html, body, #map { height: 100%; margin: 0; }
+    body {
+      font: 15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      color: var(--text);
+      overflow: hidden;
+    }
+    button, input, select { font: inherit; }
+    #map { background: var(--map-bg); }
+    .control {
+      background: var(--panel); border: 0; border-radius: 12px; box-shadow: var(--shadow);
+      min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;
+    }
+    .iconbtn { font-size: 22px; cursor: pointer; }
+    .northbtn { font-weight: 800; transition: transform .15s ease; flex-direction: column; gap: 0; line-height: .72; }
+    .northbtn .north-label { font-size: 12px; letter-spacing: .04em; }
+    .northbtn .north-arrow { font-size: 24px; }
+    .topbar {
+      position: fixed; top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px; z-index: 1000;
+      display: flex; gap: 8px; pointer-events: none;
+    }
+    .topbar > * { pointer-events: auto; }
+    .search { flex: 1; display: flex; padding: 0 10px; }
+    .search input { width: 100%; border: 0; outline: 0; background: transparent; }
+    .basemap { display: flex; gap: 4px; padding: 4px; }
+    .basemap button {
+      border: 0; background: transparent; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    }
+    .basemap button.active { background: var(--panel-2); font-weight: 700; }
+    .fabstack {
+      position: fixed; right: 10px; top: 74px; z-index: 1000; display: flex; flex-direction: column; gap: 8px;
+      align-items: flex-end;
+    }
+    .legend {
+      position: fixed; left: 10px; bottom: calc(48px + env(safe-area-inset-bottom)); z-index: 1000;
+      max-width: min(310px, calc(100vw - 86px)); padding: 10px;
+    }
+    .legend.hidden .legend-body { display: none; }
+    .legend-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-weight: 700; }
+    .drawer {
+      position: fixed; z-index: 2000; top: 0; right: 0; height: 100%; width: min(390px,92vw);
+      background: var(--panel); box-shadow: -4px 0 20px rgba(0,0,0,.25); padding: 18px; overflow: auto;
+      transform: translateX(100%); transition: transform .2s ease;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer h2 { margin: 0 0 16px; }
+    .section { border-top: 1px solid var(--border); padding: 14px 0; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+    .drawer-actions { display: flex; gap: 8px; position: sticky; bottom: 0; background: var(--panel); padding-top: 12px; }
+    .drawer-actions button { flex: 1; padding: 11px; border: 0; border-radius: 10px; }
+    .primary { background: var(--accent); color: #fff; }
+    .secondary { background: var(--panel-2); color: var(--text); }
+    .notice {
+      position: fixed; left: 50%; top: 78px; transform: translateX(-50%); z-index: 2500;
+      background: #111827; color: white; padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow);
+      display: none; max-width: min(80vw, 380px); text-align: center;
+    }
+    .heading-marker { position: relative; width: 34px; height: 34px; transform-origin: 50% 50%; will-change: transform; }
+    .heading-marker .heading-arrow {
+      position: absolute; left: 8px; top: -8px; width: 18px; height: 22px;
+      background: #2563eb; clip-path: polygon(50% 0,100% 100%,50% 75%,0 100%);
+      transform-origin: 50% 24px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45));
+    }
+    .heading-marker .heading-dot {
+      position: absolute; left: 8px; top: 8px; width: 18px; height: 18px; border-radius: 50%;
+      background: #2563eb; border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45);
+    }
+    html[data-theme="dark"] .leaflet-control-zoom a {
+      background: var(--panel); color: var(--text); border-color: var(--border);
+    }
+    .leaflet-control-scale { margin-left: 10px!important; margin-bottom: calc(10px + env(safe-area-inset-bottom))!important; }
+    .leaflet-control-scale-line { background: var(--panel); color: var(--text); border-color: var(--text); border-top: 0; font-weight: 700; text-shadow: none; box-shadow: var(--shadow); }
+    select, input, button { color: var(--text); }
+    select, input { background: var(--panel); border-color: var(--border); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
 
-function updateHeadingMarker(){
-  if(locationMarker) locationMarker.setIcon(headingIcon());
-}
+  <div class="topbar">
+    <div class="control search"><input id="searchInput" placeholder="Trail, Gemeinde oder Flurname suchen…" autocomplete="off"></div>
+    <button id="settingsBtn" class="control iconbtn" aria-label="Einstellungen">⚙</button>
+  </div>
 
-let lastHeadingUpdate = 0;
-let pendingHeading = null;
-let headingTimer = null;
-let oppositeHeadingCandidate = null;
-let oppositeHeadingCount = 0;
+  <div class="fabstack">
+    <div class="control basemap">
+      <button id="osmBtn" class="active">Karte</button>
+      <button id="aerialBtn">Luftbild</button>
+    </div>
+    <button id="locateBtn" class="control iconbtn" aria-label="Standort">◎</button>
+    <button id="northBtn" class="control iconbtn northbtn" aria-label="Nach Norden ausrichten" title="Nach Norden ausrichten">
+      <span class="north-label">N</span><span class="north-arrow" aria-hidden="true">↑</span>
+    </button>
+  </div>
 
-const HEADING_UPDATE_INTERVAL_MS = 200;
-const HEADING_SMOOTHING_FACTOR = 0.28;
-const LARGE_HEADING_JUMP_DEG = 120;
-const REQUIRED_LARGE_JUMP_SAMPLES = 3;
-const CANDIDATE_TOLERANCE_DEG = 35;
+  <div id="legend" class="control legend hidden">
+    <div id="legendHead" class="legend-head"><span>Legende</span><span id="legendChevron">▸</span></div>
+    <div id="legendBody" class="legend-body"></div>
+  </div>
 
-function normalizeAngle(angle){
-  return ((angle % 360) + 360) % 360;
-}
+  <div id="drawer" class="drawer">
+    <h2>MTB-Einstellungen</h2>
+    <div class="section">
+      <strong>Anzuzeigende Daten und Priorität</strong>
+      <div id="priorityList" class="priority-list"></div>
+    </div>
+    <div class="section">
+      <div class="row"><label for="showUnrated">Unbewertete Trails anzeigen</label><input id="showUnrated" type="checkbox"></div>
+      <div class="row"><label for="showRoutes">MTB-Routen anzeigen</label><input id="showRoutes" type="checkbox"></div>
+      <div class="row"><label for="showTrailDirection">Trail-Richtung anzeigen</label><input id="showTrailDirection" type="checkbox"></div>
+      <div class="row"><label for="highContrast">Hoher Kontrast</label><input id="highContrast" type="checkbox"></div>
+      <div class="row"><label for="followLocation">Standort folgen</label><input id="followLocation" type="checkbox"></div>
+      <div class="row"><label for="themeMode">Darstellung</label>
+        <select id="themeMode">
+          <option value="system">System</option>
+          <option value="light">Hell</option>
+          <option value="dark">Dunkel</option>
+        </select>
+      </div>
+    </div>
+    <div class="section">
+      <strong>Daten</strong>
+      <div id="dataStatus" class="small">Lade Daten…</div>
+      <button id="refreshBtn" class="secondary" style="margin-top:8px;padding:10px;border:0;border-radius:10px">Kartendaten neu laden</button>
+    </div>
+    <div class="drawer-actions">
+      <button id="closeSettings" class="primary">Schliessen</button>
+    </div>
+  </div>
 
-function shortestAngleDifference(from, to){
-  return ((to - from + 540) % 360) - 180;
-}
+  <div id="notice" class="notice"></div>
 
-function circularDistance(a, b){
-  return Math.abs(shortestAngleDifference(a, b));
-}
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-rotate@0.2.7/dist/leaflet-rotate-src.js"></script>
+  <script>
+    const GUETSCHWALD = [47.05012, 8.29021];
+    const START_ZOOM = 16;
 
-function filterHeading(rawHeading){
-  const normalized = normalizeAngle(rawHeading);
-
-  if(!Number.isFinite(currentHeading)){
-    oppositeHeadingCandidate = null;
-    oppositeHeadingCount = 0;
-    return normalized;
-  }
-
-  const jump = Math.abs(shortestAngleDifference(currentHeading, normalized));
-
-  if(jump > LARGE_HEADING_JUMP_DEG){
-    if(
-      oppositeHeadingCandidate !== null &&
-      circularDistance(oppositeHeadingCandidate, normalized) <= CANDIDATE_TOLERANCE_DEG
-    ){
-      oppositeHeadingCount++;
-      const candidateStep = shortestAngleDifference(oppositeHeadingCandidate, normalized);
-      oppositeHeadingCandidate = normalizeAngle(oppositeHeadingCandidate + candidateStep * 0.5);
-    }else{
-      oppositeHeadingCandidate = normalized;
-      oppositeHeadingCount = 1;
+    function showNotice(msg, ms = 3500) {
+      const n = document.getElementById('notice');
+      n.textContent = msg;
+      n.style.display = 'block';
+      clearTimeout(n._t); n._t = setTimeout(() => n.style.display = 'none', ms);
     }
 
-    if(oppositeHeadingCount < REQUIRED_LARGE_JUMP_SAMPLES){
-      return null;
+    function applyTheme(mode) {
+      const resolved = mode === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : mode;
+      document.documentElement.dataset.theme = resolved;
     }
 
-    const confirmed = oppositeHeadingCandidate;
-    oppositeHeadingCandidate = null;
-    oppositeHeadingCount = 0;
-    return confirmed;
-  }
+    const map = L.map('map', {
+      zoomControl: false,
+      preferCanvas: true,
+      rotate: true,
+      touchRotate: true,
+      bearing: 0,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
+      inertia: true
+    });
+    map.setView(GUETSCHWALD, START_ZOOM, { animate: false });
 
-  oppositeHeadingCandidate = null;
-  oppositeHeadingCount = 0;
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.scale({ position: 'bottomleft', metric: true, imperial: false, maxWidth: 120 }).addTo(map);
 
-  const delta = shortestAngleDifference(currentHeading, normalized);
-  return normalizeAngle(currentHeading + delta * HEADING_SMOOTHING_FACTOR);
-}
+    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap-Mitwirkende',
+      updateWhenIdle: true,
+      keepBuffer: 2
+    });
+    const aerial = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles © Esri, Maxar, Earthstar Geographics und weitere',
+      updateWhenIdle: true,
+      keepBuffer: 2
+    });
+    osm.addTo(map);
 
-function applyPendingHeading(){
-  headingTimer = null;
-  if(pendingHeading === null) return;
-  currentHeading = pendingHeading;
-  pendingHeading = null;
-  lastHeadingUpdate = performance.now();
-  updateHeadingMarker();
-}
+    const settings = {
+      showUnrated: false,
+      showRoutes: false,
+      showTrailDirection: true,
+      highContrast: true,
+      followLocation: false,
+      theme: 'system'
+    };
+    applyTheme(settings.theme || 'system');
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+      if ((settings.theme || 'system') === 'system') applyTheme('system');
+    });
 
-function onOrientation(event){
-  let heading = null;
-  if(typeof event.webkitCompassHeading === "number") heading = event.webkitCompassHeading;
-  else if(typeof event.alpha === "number") heading = (360 - event.alpha) % 360;
-  if(heading === null) return;
+    document.getElementById('osmBtn').addEventListener('click', () => {
+      map.removeLayer(aerial);
+      if (!map.hasLayer(osm)) osm.addTo(map);
+      document.getElementById('osmBtn').classList.add('active');
+      document.getElementById('aerialBtn').classList.remove('active');
+    });
+    document.getElementById('aerialBtn').addEventListener('click', () => {
+      map.removeLayer(osm);
+      if (!map.hasLayer(aerial)) aerial.addTo(map);
+      document.getElementById('aerialBtn').classList.add('active');
+      document.getElementById('osmBtn').classList.remove('active');
+    });
 
-  const filteredHeading = filterHeading(heading);
-  if(filteredHeading === null) return;
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      document.getElementById('drawer').classList.toggle('open');
+    });
+    document.getElementById('closeSettings').addEventListener('click', () => {
+      document.getElementById('drawer').classList.remove('open');
+    });
+    document.getElementById('northBtn').addEventListener('click', () => {
+      if (typeof map.setBearing === 'function') map.setBearing(0);
+      if (typeof map.getContainer === 'function' && map.getContainer()) map.getContainer().focus?.();
+    });
 
-  pendingHeading = filteredHeading;
-  const elapsed = performance.now() - lastHeadingUpdate;
+    let locationMarker = null;
+    let accuracyCircle = null;
+    let watchId = null;
+    let currentHeading = null;
+    let orientationListenerInstalled = false;
+    let lastHeadingUpdate = 0;
+    let pendingHeading = null;
+    let headingTimer = null;
+    let oppositeHeadingCandidate = null;
+    let oppositeHeadingCount = 0;
+    const HEADING_UPDATE_INTERVAL_MS = 200;
+    const HEADING_SMOOTHING_FACTOR = 0.28;
+    const LARGE_HEADING_JUMP_DEG = 120;
+    const REQUIRED_LARGE_JUMP_SAMPLES = 3;
+    const CANDIDATE_TOLERANCE_DEG = 35;
 
-  if(elapsed >= HEADING_UPDATE_INTERVAL_MS){
-    applyPendingHeading();
-  }else if(!headingTimer){
-    headingTimer = setTimeout(applyPendingHeading, HEADING_UPDATE_INTERVAL_MS - elapsed);
-  }
-}
+    function normalizeAngle(angle) {
+      return ((angle % 360) + 360) % 360;
+    }
+    function shortestAngleDifference(from, to) {
+      return ((to - from + 540) % 360) - 180;
+    }
+    function circularDistance(a, b) {
+      return Math.abs(shortestAngleDifference(a, b));
+    }
 
-async function enableOrientation(){
-  if(orientationListenerInstalled) return;
-  if(typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function"){
-    try{
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if(permission !== "granted") return;
-    }catch{return;}
-  }
-  window.addEventListener("deviceorientationabsolute", onOrientation, true);
-  window.addEventListener("deviceorientation", onOrientation, true);
-  orientationListenerInstalled = true;
-}
+    function headingIcon() {
+      const mapBearing = typeof map.getBearing === 'function' ? map.getBearing() : 0;
+      const headingRotation = Number.isFinite(currentHeading) ? currentHeading - mapBearing : -mapBearing;
+      return L.divIcon({
+        className: '',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        html: `
+          <div class="heading-marker" style="transform: rotate(${headingRotation}deg)">
+            <div class="heading-arrow"></div>
+            <div class="heading-dot"></div>
+          </div>
+        `
+      });
+    }
 
-function updateLocation(pos){
-  const ll = [pos.coords.latitude, pos.coords.longitude];
-  const acc = pos.coords.accuracy;
-  if(!locationMarker) locationMarker = L.marker(ll, {icon: headingIcon(), interactive: false, zIndexOffset: 1000, rotateWithView: false}).addTo(map);
-  else locationMarker.setLatLng(ll);
-  if(!accuracyCircle) accuracyCircle = L.circle(ll, {radius: acc, color: "#2563eb", weight: 1, fillOpacity: 0.08, interactive: false}).addTo(map);
-  else accuracyCircle.setLatLng(ll).setRadius(acc);
-  if(settings.followLocation) map.setView(ll, Math.max(map.getZoom(), 16), {animate: false});
-}
+    function updateHeadingMarker() {
+      if (locationMarker) locationMarker.setIcon(headingIcon());
+    }
 
-async function locate({silent = false} = {}){
-  if(!navigator.geolocation){
-    if(!silent) showNotice("Standort wird von diesem Browser nicht unterstützt");
-    return;
-  }
+    function filterHeading(rawHeading) {
+      const normalized = normalizeAngle(rawHeading);
+      if (!Number.isFinite(currentHeading)) {
+        oppositeHeadingCandidate = null;
+        oppositeHeadingCount = 0;
+        return normalized;
+      }
 
-  await enableOrientation();
+      const jump = Math.abs(shortestAngleDifference(currentHeading, normalized));
+      if (jump > LARGE_HEADING_JUMP_DEG) {
+        if (oppositeHeadingCandidate !== null && circularDistance(oppositeHeadingCandidate, normalized) <= CANDIDATE_TOLERANCE_DEG) {
+          oppositeHeadingCount++;
+          const candidateStep = shortestAngleDifference(oppositeHeadingCandidate, normalized);
+          oppositeHeadingCandidate = normalizeAngle(oppositeHeadingCandidate + candidateStep * 0.5);
+        } else {
+          oppositeHeadingCandidate = normalized;
+          oppositeHeadingCount = 1;
+        }
+        if (oppositeHeadingCount < REQUIRED_LARGE_JUMP_SAMPLES) return null;
+        const confirmed = oppositeHeadingCandidate;
+        oppositeHeadingCandidate = null;
+        oppositeHeadingCount = 0;
+        return confirmed;
+      }
 
-  navigator.geolocation.getCurrentPosition(
-    p => {
-      updateLocation(p);
-      map.setView([p.coords.latitude, p.coords.longitude], START_ZOOM, {animate: false});
-    },
-    e => {
-      if(!silent){
-        showNotice(
-          e.code === 1
-            ? "Standortberechtigung wurde verweigert – Gütschwald wird angezeigt"
-            : "Standort konnte nicht bestimmt werden – Gütschwald wird angezeigt"
+      oppositeHeadingCandidate = null;
+      oppositeHeadingCount = 0;
+      const delta = shortestAngleDifference(currentHeading, normalized);
+      return normalizeAngle(currentHeading + delta * HEADING_SMOOTHING_FACTOR);
+    }
+
+    function applyPendingHeading() {
+      headingTimer = null;
+      if (pendingHeading === null) return;
+      currentHeading = pendingHeading;
+      pendingHeading = null;
+      lastHeadingUpdate = performance.now();
+      updateHeadingMarker();
+    }
+
+    function onOrientation(event) {
+      let heading = null;
+      if (typeof event.webkitCompassHeading === 'number') heading = event.webkitCompassHeading;
+      else if (typeof event.alpha === 'number') heading = (360 - event.alpha) % 360;
+      if (heading === null) return;
+
+      const filteredHeading = filterHeading(heading);
+      if (filteredHeading === null) return;
+      pendingHeading = filteredHeading;
+      const elapsed = performance.now() - lastHeadingUpdate;
+      if (elapsed >= HEADING_UPDATE_INTERVAL_MS) {
+        applyPendingHeading();
+      } else if (!headingTimer) {
+        headingTimer = setTimeout(applyPendingHeading, HEADING_UPDATE_INTERVAL_MS - elapsed);
+      }
+    }
+
+    async function enableOrientation() {
+      if (orientationListenerInstalled) return;
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const permission = await DeviceOrientationEvent.requestPermission();
+          if (permission !== 'granted') return;
+        } catch {
+          return;
+        }
+      }
+      window.addEventListener('deviceorientationabsolute', onOrientation, true);
+      window.addEventListener('deviceorientation', onOrientation, true);
+      orientationListenerInstalled = true;
+    }
+
+    function updateLocation(pos) {
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      const acc = pos.coords.accuracy;
+      if (!locationMarker) {
+        locationMarker = L.marker(ll, {
+          icon: headingIcon(),
+          interactive: false,
+          zIndexOffset: 1000,
+          rotateWithView: false
+        }).addTo(map);
+      } else {
+        locationMarker.setLatLng(ll);
+      }
+      if (!accuracyCircle) {
+        accuracyCircle = L.circle(ll, { radius: acc, color: '#2563eb', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
+      } else {
+        accuracyCircle.setLatLng(ll).setRadius(acc);
+      }
+      if (settings.followLocation) map.setView(ll, Math.max(map.getZoom(), 16), { animate: false });
+    }
+
+    async function locate({ silent = false } = {}) {
+      if (!navigator.geolocation) {
+        if (!silent) showNotice('Standort wird von diesem Browser nicht unterstützt');
+        return;
+      }
+      await enableOrientation();
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          updateLocation(p);
+          map.setView([p.coords.latitude, p.coords.longitude], START_ZOOM, { animate: false });
+        },
+        (e) => {
+          if (!silent) {
+            showNotice(e.code === 1 ? 'Standortberechtigung wurde verweigert – Gütschwald wird angezeigt' : 'Standort konnte nicht bestimmt werden – Gütschwald wird angezeigt');
+          }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+      );
+
+      if (watchId === null) {
+        watchId = navigator.geolocation.watchPosition(
+          (p) => {
+            const hadNoLocation = !locationMarker;
+            updateLocation(p);
+            if (hadNoLocation) {
+              map.setView([p.coords.latitude, p.coords.longitude], START_ZOOM, { animate: false });
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 3000 }
         );
       }
-    },
-    {enableHighAccuracy: true, timeout: 15000, maximumAge: 5000}
-  );
+    }
 
-  if(watchId === null){
-    watchId = navigator.geolocation.watchPosition(
-      p => {
-        const hadNoLocation = !locationMarker;
-        updateLocation(p);
-        if(hadNoLocation){
-          map.setView([p.coords.latitude, p.coords.longitude], START_ZOOM, {animate: false});
-        }
-      },
-      () => {},
-      {enableHighAccuracy: true, timeout: 20000, maximumAge: 3000}
-    );
-  }
-}
+    document.getElementById('locateBtn').addEventListener('click', () => locate({ silent: false }));
 
-document.getElementById("locateBtn").onclick = locate;
+    const pattern = /mtb|trail|gutschwald|route/i;
+    const demoTrails = [
+      { lat: 47.05012, lng: 8.29021, name: 'Demo-Trail 1' },
+      { lat: 47.0494, lng: 8.2912, name: 'Demo-Trail 2' },
+      { lat: 47.0511, lng: 8.2865, name: 'Demo-Trail 3' }
+    ];
+    const trailLayer = L.layerGroup();
+    demoTrails.forEach((trail) => {
+      L.polyline([
+        [trail.lat - 0.0012, trail.lng - 0.0018],
+        [trail.lat + 0.0015, trail.lng + 0.0022],
+        [trail.lat + 0.0030, trail.lng - 0.0006]
+      ], {
+        color: '#2563eb',
+        weight: 4,
+        opacity: 0.95,
+        smoothFactor: 1.5
+      }).addTo(map);
+    });
+
+    const legendBody = document.getElementById('legendBody');
+    const legendEntries = [
+      { color: '#2ca25f', label: 'MTB leicht' },
+      { color: '#2b8cbe', label: 'MTB mittel' },
+      { color: '#f59e0b', label: 'MTB anspruchsvoll' },
+      { color: '#ef4444', label: 'MTB schwer' }
+    ];
+    legendEntries.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'legend-row';
+      row.innerHTML = `<span class="swatch" style="background:${item.color}"></span><span>${item.label}</span>`;
+      legendBody.appendChild(row);
+    });
+
+    document.getElementById('legendHead').addEventListener('click', () => {
+      const legend = document.getElementById('legend');
+      legend.classList.toggle('hidden');
+      document.getElementById('legendChevron').textContent = legend.classList.contains('hidden') ? '▸' : '▾';
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      showNotice('Kartendaten neu geladen');
+      map.flyTo(GUETSCHWALD, START_ZOOM, { duration: 0.5 });
+    });
+
+    document.getElementById('themeMode').value = settings.theme || 'system';
+    document.getElementById('themeMode').addEventListener('change', (e) => {
+      settings.theme = e.target.value;
+      applyTheme(settings.theme);
+    });
+    document.getElementById('showUnrated').checked = !!settings.showUnrated;
+    document.getElementById('showRoutes').checked = !!settings.showRoutes;
+    document.getElementById('showTrailDirection').checked = !!settings.showTrailDirection;
+    document.getElementById('highContrast').checked = !!settings.highContrast;
+    document.getElementById('followLocation').checked = !!settings.followLocation;
+    document.getElementById('showUnrated').addEventListener('change', (e) => settings.showUnrated = !!e.target.checked);
+    document.getElementById('showRoutes').addEventListener('change', (e) => settings.showRoutes = !!e.target.checked);
+    document.getElementById('showTrailDirection').addEventListener('change', (e) => settings.showTrailDirection = !!e.target.checked);
+    document.getElementById('highContrast').addEventListener('change', (e) => settings.highContrast = !!e.target.checked);
+    document.getElementById('followLocation').addEventListener('change', (e) => settings.followLocation = !!e.target.checked);
+
+    if (!document.getElementById('legend').classList.contains('hidden')) {
+      document.getElementById('legendChevron').textContent = '▾';
+    }
+
+    map.whenReady(() => {
+      showNotice('Karte wiederhergestellt');
+    });
+  </script>
+</body>
+</html>
