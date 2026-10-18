@@ -1,492 +1,1195 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#1f2937">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <title>MTB Trailkarte</title>
-  <meta name="app-version" content="2.4.2">
-  <style>
-    :root {
-      --panel: #fff;
-      --panel-2: #f3f4f6;
-      --text: #111827;
-      --muted: #6b7280;
-      --accent: #2563eb;
-      --border: #e5e7eb;
-      --map-bg: #ddd;
-      --shadow: 0 2px 14px rgba(0,0,0,.22);
-    }
-    html[data-theme="dark"] {
-      --panel: #111827;
-      --panel-2: #1f2937;
-      --text: #f9fafb;
-      --muted: #9ca3af;
-      --border: #374151;
-      --map-bg: #0f172a;
-      --shadow: 0 2px 18px rgba(0,0,0,.5);
-    }
-    * { box-sizing: border-box; }
-    html, body, #map { height: 100%; margin: 0; }
-    body {
-      font: 15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-      color: var(--text);
-      overflow: hidden;
-    }
-    button, input, select { font: inherit; }
-    #map { background: var(--map-bg); }
-    .control {
-      background: var(--panel); border: 0; border-radius: 12px; box-shadow: var(--shadow);
-      min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center;
-    }
-    .iconbtn { font-size: 22px; cursor: pointer; }
-    .northbtn { font-weight: 800; transition: transform .15s ease; flex-direction: column; gap: 0; line-height: .72; }
-    .northbtn .north-label { font-size: 12px; letter-spacing: .04em; }
-    .northbtn .north-arrow { font-size: 24px; }
-    .topbar {
-      position: fixed; top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px; z-index: 1000;
-      display: flex; gap: 8px; pointer-events: none;
-    }
-    .topbar > * { pointer-events: auto; }
-    .search { flex: 1; display: flex; padding: 0 10px; }
-    .search input { width: 100%; border: 0; outline: 0; background: transparent; }
-    .basemap { display: flex; gap: 4px; padding: 4px; }
-    .basemap button {
-      border: 0; background: transparent; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px;
-    }
-    .basemap button.active { background: var(--panel-2); font-weight: 700; }
-    .fabstack {
-      position: fixed; right: 10px; top: 74px; z-index: 1000; display: flex; flex-direction: column; gap: 8px;
-      align-items: flex-end;
-    }
-    .legend {
-      position: fixed; left: 10px; bottom: calc(48px + env(safe-area-inset-bottom)); z-index: 1000;
-      max-width: min(310px, calc(100vw - 86px)); padding: 10px;
-    }
-    .legend.hidden .legend-body { display: none; }
-    .legend-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-weight: 700; }
-    .drawer {
-      position: fixed; z-index: 2000; top: 0; right: 0; height: 100%; width: min(390px,92vw);
-      background: var(--panel); box-shadow: -4px 0 20px rgba(0,0,0,.25); padding: 18px; overflow: auto;
-      transform: translateX(100%); transition: transform .2s ease;
-    }
-    .drawer.open { transform: translateX(0); }
-    .drawer h2 { margin: 0 0 16px; }
-    .section { border-top: 1px solid var(--border); padding: 14px 0; }
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
-    .drawer-actions { display: flex; gap: 8px; position: sticky; bottom: 0; background: var(--panel); padding-top: 12px; }
-    .drawer-actions button { flex: 1; padding: 11px; border: 0; border-radius: 10px; }
-    .primary { background: var(--accent); color: #fff; }
-    .secondary { background: var(--panel-2); color: var(--text); }
-    .notice {
-      position: fixed; left: 50%; top: 78px; transform: translateX(-50%); z-index: 2500;
-      background: #111827; color: white; padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow);
-      display: none; max-width: min(80vw, 380px); text-align: center;
-    }
-    .heading-marker { position: relative; width: 34px; height: 34px; transform-origin: 50% 50%; will-change: transform; }
-    .heading-marker .heading-arrow {
-      position: absolute; left: 8px; top: -8px; width: 18px; height: 22px;
-      background: #2563eb; clip-path: polygon(50% 0,100% 100%,50% 75%,0 100%);
-      transform-origin: 50% 24px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45));
-    }
-    .heading-marker .heading-dot {
-      position: absolute; left: 8px; top: 8px; width: 18px; height: 18px; border-radius: 50%;
-      background: #2563eb; border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45);
-    }
-    html[data-theme="dark"] .leaflet-control-zoom a {
-      background: var(--panel); color: var(--text); border-color: var(--border);
-    }
-    .leaflet-control-scale { margin-left: 10px!important; margin-bottom: calc(10px + env(safe-area-inset-bottom))!important; }
-    .leaflet-control-scale-line { background: var(--panel); color: var(--text); border-color: var(--text); border-top: 0; font-weight: 700; text-shadow: none; box-shadow: var(--shadow); }
-    select, input, button { color: var(--text); }
-    select, input { background: var(--panel); border-color: var(--border); }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f2937">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<title>MTB Trailkarte</title>
+<meta name="app-version" content="2.4.2">
+<style>
+:root{
+  --panel:#fff;
+  --panel-2:#f3f4f6;
+  --text:#111827;
+  --muted:#6b7280;
+  --accent:#2563eb;
+  --border:#e5e7eb;
+  --map-bg:#ddd;
+  --shadow:0 2px 14px rgba(0,0,0,.22)
+}
+html[data-theme="dark"]{
+  --panel:#111827;
+  --panel-2:#1f2937;
+  --text:#f9fafb;
+  --muted:#9ca3af;
+  --border:#374151;
+  --map-bg:#0f172a;
+  --shadow:0 2px 18px rgba(0,0,0,.5)
+}
+*{box-sizing:border-box}
+html,body,#map{height:100%;margin:0}
+body{font:15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);overflow:hidden}
+button,input,select{font:inherit}
+#map{background:var(--map-bg)}
+.control{
+  background:var(--panel); border:0; border-radius:12px; box-shadow:var(--shadow);
+  min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center;
+}
+.iconbtn{font-size:22px;cursor:pointer}
+.northbtn{font-weight:800;transition:transform .15s ease;flex-direction:column;gap:0;line-height:.72}
+.northbtn .north-label{font-size:12px;letter-spacing:.04em}
+.northbtn .north-arrow{font-size:24px}
+.sheet-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sheet-title h3{margin:0}
+.sheet-close{border:0;background:#e5e7eb;border-radius:999px;width:36px;height:36px;font-size:22px;line-height:1;cursor:pointer;flex:0 0 auto}
+.topbar{position:fixed;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;z-index:1000;display:flex;gap:8px;pointer-events:none}
+.topbar>*{pointer-events:auto}
+.search{flex:1;display:flex;padding:0 10px}
+.search input{width:100%;border:0;outline:0;background:transparent}
+.basemap{display:flex;gap:4px;padding:4px}
+.basemap button{border:0;background:transparent;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13px}
+.basemap button.active{background:var(--panel-2);font-weight:700}
+.fabstack{position:fixed;right:10px;top:74px;z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.legend{position:fixed;left:10px;bottom:calc(48px + env(safe-area-inset-bottom));z-index:1000;max-width:min(310px,calc(100vw - 86px));padding:10px}
+.legend.hidden .legend-body{display:none}
+.legend-head{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:700}
+.legend-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.legend-group{display:flex;align-items:center;gap:8px;margin-top:8px}
+.legend-group .info-link{margin-left:auto}
+.legend .info-link{border:0;background:var(--panel-2);border-radius:8px;width:20px;height:20px;min-width:20px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:var(--text);font-size:12px;font-weight:700;font-style:italic;flex:0 0 auto}
+.swatch{width:26px;height:5px;border-radius:4px;display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.drawer{position:fixed;z-index:2000;top:0;right:0;height:100%;width:min(390px,92vw);background:var(--panel);box-shadow:-4px 0 20px rgba(0,0,0,.25);padding:18px;overflow:auto;transform:translateX(105%);transition:.22s}
+.drawer.open{transform:translateX(0)}
+.drawer h2{margin:0 0 16px}
+.section{border-top:1px solid var(--border);padding:14px 0}
+.section:first-of-type{border-top:0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}
+.priority-list{display:flex;flex-direction:column;gap:8px}
+.priority-item{display:grid;grid-template-columns:auto minmax(90px,1fr) auto auto auto auto;gap:8px;align-items:center;padding:9px;border:1px solid var(--border);border-radius:10px}
+.priority-item button,.priority-item a{border:0;background:var(--panel-2);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:inherit;font-weight:700}
+.drawer-actions{display:flex;gap:8px;position:sticky;bottom:0;background:var(--panel);padding-top:12px}
+.drawer-actions button{flex:1;padding:11px;border:0;border-radius:10px}
+.primary{background:var(--accent);color:#fff}
+.secondary{background:var(--panel-2);color:var(--text)}
+.sheet{position:fixed;z-index:1800;left:0;right:0;bottom:0;background:var(--panel);border-radius:18px 18px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);padding:18px 18px calc(18px + env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s;max-height:55vh;overflow:auto}
+.sheet.open{transform:translateY(0)}
+.sheet h3{margin:0 0 8px}
+.sheet-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 14px}
+.elevation-profile-section{border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
+.elevation-profile-toggle{width:100%;margin-top:10px;padding:10px 0;border:0;background:transparent;color:var(--text);font-weight:700;text-align:left;cursor:pointer}
+.elevation-chart{display:block;width:100%;height:auto;max-height:170px;margin-top:4px}
+.elevation-chart .area{fill:var(--accent);fill-opacity:.22}
+.elevation-chart .line{fill:none;stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke}
+.elevation-chart .axis{stroke:var(--border);stroke-width:1;vector-effect:non-scaling-stroke}
+.elevation-chart text{fill:var(--muted);font:11px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2ff;margin:2px 4px 2px 0}
+.notice{position:fixed;left:50%;top:78px;transform:translateX(-50%);z-index:2500;background:#111827;color:white;padding:10px 14px;border-radius:10px;box-shadow:var(--shadow);display:none;max-width:90vw}
+.search-results{position:fixed;top:64px;left:10px;right:110px;z-index:1700;background:var(--panel);box-shadow:var(--shadow);border-radius:12px;max-height:45vh;overflow:auto;display:none}
+.search-results button{display:block;width:100%;text-align:left;padding:11px;border:0;border-bottom:1px solid var(--border);background:var(--panel);color:var(--text)}
+.small{font-size:12px;color:var(--muted)}
+.heading-marker{position:relative;width:34px;height:34px}
+.heading-marker .heading-arrow{
+  position:absolute;left:8px;top:-8px;width:18px;height:22px;
+  background:#2563eb;clip-path:polygon(50% 0,100% 100%,50% 75%,0 100%);
+  transform-origin:50% 24px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))
+}
+.heading-marker .heading-dot{
+  position:absolute;left:8px;top:8px;width:18px;height:18px;border-radius:50%;
+  background:#2563eb;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)
+}
+html[data-theme="dark"] .leaflet-control-zoom a{
+  background:var(--panel);color:var(--text);border-color:var(--border)
+}
+html[data-theme="dark"] .leaflet-popup-content-wrapper,
+html[data-theme="dark"] .leaflet-popup-tip{
+  background:var(--panel);color:var(--text)
+}
+.leaflet-control-scale{margin-left:10px!important;margin-bottom:calc(10px + env(safe-area-inset-bottom))!important}
+.leaflet-control-scale-line{background:var(--panel);color:var(--text);border-color:var(--text);border-top:0;font-weight:700;text-shadow:none;box-shadow:var(--shadow)}
+select,input,button{color:var(--text)}
+select,input{background:var(--panel);border-color:var(--border)}
+@media (max-width:560px){.legend{font-size:13px}}
+</style>
 </head>
 <body>
-  <div id="map"></div>
+<div id="map"></div>
 
-  <div class="topbar">
-    <div class="control search"><input id="searchInput" placeholder="Trail, Gemeinde oder Flurname suchen…" autocomplete="off"></div>
-    <button id="settingsBtn" class="control iconbtn" aria-label="Einstellungen">⚙</button>
+<div class="topbar">
+  <div class="control search"><input id="searchInput" placeholder="Trail, Gemeinde oder Flurname suchen…" autocomplete="off"></div>
+  <button id="settingsBtn" class="control iconbtn" aria-label="Einstellungen">⚙</button>
+</div>
+<div id="searchResults" class="search-results"></div>
+
+<div class="fabstack">
+  <div class="control basemap">
+    <button id="osmBtn" class="active">Karte</button>
+    <button id="aerialBtn">Luftbild</button>
+  </div>
+  <button id="locateBtn" class="control iconbtn" aria-label="Standort">◎</button>
+  <button id="northBtn" class="control iconbtn northbtn" aria-label="Nach Norden ausrichten" title="Nach Norden ausrichten"><span class="north-label">N</span><span class="north-arrow" aria-hidden="true">↑</span></button>
+  <button id="nearestBtn" class="control iconbtn" aria-label="Nächster Trail">↝</button>
+  <button id="gpxBtn" class="control iconbtn" aria-label="GPX importieren">＋</button>
+  <input id="gpxInput" type="file" accept=".gpx,application/gpx+xml" hidden>
+</div>
+
+<div id="legend" class="control legend hidden">
+  <div id="legendHead" class="legend-head"><span>Legende</span><span id="legendChevron">▸</span></div>
+  <div id="legendBody" class="legend-body"></div>
+</div>
+
+<div id="drawer" class="drawer">
+  <h2>MTB-Einstellungen</h2>
+
+  <div class="section">
+    <strong>Anzuzeigende Daten und Priorität</strong>
+    <div class="small">Der oberste aktive Eintrag bestimmt die Farbe, sofern der Tag vorhanden ist.</div>
+    <div id="priorityList" class="priority-list"></div>
   </div>
 
-  <div class="fabstack">
-    <div class="control basemap">
-      <button id="osmBtn" class="active">Karte</button>
-      <button id="aerialBtn">Luftbild</button>
-    </div>
-    <button id="locateBtn" class="control iconbtn" aria-label="Standort">◎</button>
-    <button id="northBtn" class="control iconbtn northbtn" aria-label="Nach Norden ausrichten" title="Nach Norden ausrichten">
-      <span class="north-label">N</span><span class="north-arrow" aria-hidden="true">↑</span>
-    </button>
-  </div>
-
-  <div id="legend" class="control legend hidden">
-    <div id="legendHead" class="legend-head"><span>Legende</span><span id="legendChevron">▸</span></div>
-    <div id="legendBody" class="legend-body"></div>
-  </div>
-
-  <div id="drawer" class="drawer">
-    <h2>MTB-Einstellungen</h2>
-    <div class="section">
-      <strong>Anzuzeigende Daten und Priorität</strong>
-      <div id="priorityList" class="priority-list"></div>
-    </div>
-    <div class="section">
-      <div class="row"><label for="showUnrated">Unbewertete Trails anzeigen</label><input id="showUnrated" type="checkbox"></div>
-      <div class="row"><label for="showRoutes">MTB-Routen anzeigen</label><input id="showRoutes" type="checkbox"></div>
-      <div class="row"><label for="showTrailDirection">Trail-Richtung anzeigen</label><input id="showTrailDirection" type="checkbox"></div>
-      <div class="row"><label for="highContrast">Hoher Kontrast</label><input id="highContrast" type="checkbox"></div>
-      <div class="row"><label for="followLocation">Standort folgen</label><input id="followLocation" type="checkbox"></div>
-      <div class="row"><label for="themeMode">Darstellung</label>
-        <select id="themeMode">
-          <option value="system">System</option>
-          <option value="light">Hell</option>
-          <option value="dark">Dunkel</option>
-        </select>
-      </div>
-    </div>
-    <div class="section">
-      <strong>Daten</strong>
-      <div id="dataStatus" class="small">Lade Daten…</div>
-      <button id="refreshBtn" class="secondary" style="margin-top:8px;padding:10px;border:0;border-radius:10px">Kartendaten neu laden</button>
-    </div>
-    <div class="drawer-actions">
-      <button id="closeSettings" class="primary">Schliessen</button>
+  <div class="section">
+    <div class="row"><label for="showUnrated">Unbewertete Trails anzeigen</label><input id="showUnrated" type="checkbox"></div>
+    <div class="row"><label for="showRoutes">MTB-Routen anzeigen</label><input id="showRoutes" type="checkbox"></div>
+    <div class="row"><label for="showTrailDirection">Trail-Richtung anzeigen</label><input id="showTrailDirection" type="checkbox"></div>
+    <div class="row"><label for="highContrast">Hoher Kontrast</label><input id="highContrast" type="checkbox"></div>
+    <div class="row"><label for="followLocation">Standort folgen</label><input id="followLocation" type="checkbox"></div>
+    <div class="row"><label for="themeMode">Darstellung</label>
+      <select id="themeMode">
+        <option value="system">System</option>
+        <option value="light">Hell</option>
+        <option value="dark">Dunkel</option>
+      </select>
     </div>
   </div>
 
-  <div id="notice" class="notice"></div>
+  <div class="section">
+    <strong>Daten</strong>
+    <div id="dataStatus" class="small">Lade Daten…</div>
+    <div id="metaStatus" class="small" style="margin-top:8px"></div>
+    <button id="refreshBtn" class="secondary" style="margin-top:8px;padding:10px;border:0;border-radius:10px">Kartendaten neu laden</button>
+  </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet-rotate@0.2.7/dist/leaflet-rotate-src.js"></script>
-  <script>
-    const GUETSCHWALD = [47.05012, 8.29021];
-    const START_ZOOM = 16;
+  <div class="drawer-actions">
+    <button id="closeSettings" class="primary">Schliessen</button>
+  </div>
+</div>
 
-    function showNotice(msg, ms = 3500) {
-      const n = document.getElementById('notice');
-      n.textContent = msg;
-      n.style.display = 'block';
-      clearTimeout(n._t); n._t = setTimeout(() => n.style.display = 'none', ms);
+<div id="sheet" class="sheet"></div>
+<div id="notice" class="notice"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.7/dist/leaflet-rotate-src.js"></script>
+<script>
+
+const TAG_DOCS={
+  "mtb:scale":"https://wiki.openstreetmap.org/wiki/DE:Key:mtb:scale?uselang=de#mtb:scale=0-6",
+  "mtb:scale:imba":"https://wiki.openstreetmap.org/wiki/DE:Key:mtb:scale:imba?uselang=de#Werte",
+  "mtb:scale:uphill":"https://wiki.openstreetmap.org/w/index.php?title=Key:mtb:scale&uselang=de#mtb:scale:uphill=0-5"
+};
+
+const TAGS={
+  "mtb:scale":{
+    label:"MTB-Trails",
+    prefix:"S",
+    colors:{"0":"#2ca25f","1":"#2b8cbe","2":"#f59e0b","3":"#ef4444","4":"#991b1b","5":"#111827","6":"#7e22ce"},
+    order:["0","1","2","3","4","5","6"]
+  },
+  "mtb:scale:imba":{
+    label:"IMBA",
+    prefix:"",
+    colors:{"0":"#22c55e","1":"#3b82f6","2":"#111827","3":"#111827","4":"#7e22ce"},
+    names:{"0":"Grün","1":"Blau","2":"Schwarz","3":"Doppelschwarz","4":"Extrem"},
+    order:["0","1","2","3","4"]
+  },
+  "mtb:scale:uphill":{
+    label:"Uphill",
+    prefix:"U",
+    colors:{"0":"#22c55e","1":"#84cc16","2":"#eab308","3":"#f97316","4":"#ef4444","5":"#111827"},
+    order:["0","1","2","3","4","5"]
+  }
+};
+
+const DEFAULT_SETTINGS={
+  priority:["mtb:scale","mtb:scale:imba","mtb:scale:uphill"],
+  enabled:{"mtb:scale":true,"mtb:scale:imba":true,"mtb:scale:uphill":true},
+  maxByTag:{
+    "mtb:scale":"all",
+    "mtb:scale:imba":"all",
+    "mtb:scale:uphill":"all"
+  },
+  showUnrated:false,
+  showRoutes:false,
+  showTrailDirection:true,
+  highContrast:true,
+  followLocation:false,
+  theme:"system"
+};
+let settings=Object.assign({},DEFAULT_SETTINGS,JSON.parse(localStorage.getItem("mtbSettings")||"{}"));
+settings.enabled=Object.assign({},DEFAULT_SETTINGS.enabled,settings.enabled||{});
+settings.maxByTag=Object.assign({},DEFAULT_SETTINGS.maxByTag,settings.maxByTag||{});
+if(typeof settings.showUnrated!=="boolean") settings.showUnrated=false;
+if(typeof settings.showRoutes!=="boolean") settings.showRoutes=false;
+if(typeof settings.showTrailDirection!=="boolean") settings.showTrailDirection=true;
+
+
+function applyTheme(mode){
+  const resolved=mode==="system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")
+    : mode;
+  document.documentElement.dataset.theme=resolved;
+}
+applyTheme(settings.theme||"system");
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()=>{
+  if((settings.theme||"system")==="system") applyTheme("system");
+});
+
+const GUETSCHWALD=[47.05012,8.29021];
+const START_ZOOM=16;
+// Profildateien werden erst beim Auswählen eines vorbereiteten Trails geladen.
+// Die Zuordnung erfolgt über die unveränderte Reihenfolge der zehn Quelldateien.
+const elevationProfilesCache=new Map();
+
+const map=L.map("map",{
+  zoomControl:false,
+  preferCanvas:true,
+  rotate:true,
+  touchRotate:true,
+  bearing:0,
+  fadeAnimation:false,
+  markerZoomAnimation:false,
+  inertia:true
+});
+
+// Die Karte ist sofort benutzbar und startet immer im Gütschwald.
+// Sobald ein Standort verfügbar ist, wechselt sie automatisch dorthin.
+map.setView(GUETSCHWALD,START_ZOOM,{animate:false});
+
+const rotatingPaneParent=map.getPane("overlayPane").parentElement;
+map.createPane("trailOutlinePane",rotatingPaneParent);
+map.getPane("trailOutlinePane").style.zIndex=410;
+map.getPane("trailOutlinePane").style.pointerEvents="none";
+
+map.createPane("trailPane",rotatingPaneParent);
+map.getPane("trailPane").style.zIndex=420;
+
+const outlineRenderer=L.canvas({
+  pane:"trailOutlinePane",
+  padding:0.25,
+  tolerance:0
+});
+const trailRenderer=L.canvas({
+  pane:"trailPane",
+  padding:0.25,
+  tolerance:12
+});
+const updateTrailPoly=trailRenderer._updatePoly;
+trailRenderer._updatePoly=function(layer,closed){
+  updateTrailPoly.call(this,layer,closed);
+  if(!this._drawing || closed || !settings.showTrailDirection || !passesFilter(layer.feature?.properties||{})) return;
+  const context=this._ctx;
+  if(!context || !layer._parts) return;
+  const properties=layer.feature?.properties||{};
+  const reverse=["-1","reverse"].includes(String(properties.oneway||properties["oneway:bicycle"]||"").toLowerCase());
+  const spacing=56,size=7;
+  context.save();
+  context.strokeStyle="rgba(255,255,255,.95)";
+  context.lineWidth=settings.highContrast?2.4:2;
+  context.lineCap="round";
+  context.lineJoin="round";
+  for(const rawPart of layer._parts){
+    const part=reverse ? [...rawPart].reverse() : rawPart;
+    let remaining=spacing/2;
+    for(let index=1;index<part.length;index++){
+      const start=part[index-1],end=part[index];
+      const dx=end.x-start.x,dy=end.y-start.y,length=Math.hypot(dx,dy);
+      if(length<1) continue;
+      const ux=dx/length,uy=dy/length;
+      while(remaining<=length){
+        const x=start.x+ux*remaining,y=start.y+uy*remaining;
+        const backX=x-ux*size,backY=y-uy*size;
+        context.beginPath();
+        context.moveTo(backX-uy*size*.65,backY+ux*size*.65);
+        context.lineTo(x,y);
+        context.lineTo(backX+uy*size*.65,backY-ux*size*.65);
+        context.stroke();
+        remaining+=spacing;
+      }
+      remaining-=length;
     }
+  }
+  context.restore();
+};
 
-    function applyTheme(mode) {
-      const resolved = mode === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : mode;
-      document.documentElement.dataset.theme = resolved;
-    }
+L.control.zoom({position:"bottomright"}).addTo(map);
+L.control.scale({position:"bottomleft",metric:true,imperial:false,maxWidth:120}).addTo(map);
+const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19,
+  attribution:"© OpenStreetMap-Mitwirkende",
+  updateWhenIdle:true,
+  keepBuffer:2
+});
+const aerial=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{
+  maxZoom:19,
+  attribution:"Tiles © Esri, Maxar, Earthstar Geographics und weitere",
+  updateWhenIdle:true,
+  keepBuffer:2
+});
+osm.addTo(map);
 
-    const map = L.map('map', {
-      zoomControl: false,
-      preferCanvas: true,
-      rotate: true,
-      touchRotate: true,
-      bearing: 0,
-      fadeAnimation: false,
-      markerZoomAnimation: false,
-      inertia: true
-    });
-    map.setView(GUETSCHWALD, START_ZOOM, { animate: false });
+let geoData=null, trailLayer=null, outlineLayer=null, selectedLayer=null, searchIndex=[], gpxLayer=null;
+let locationMarker=null, accuracyCircle=null, watchId=null;
+let currentHeading=null, orientationListenerInstalled=false;
 
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-    L.control.scale({ position: 'bottomleft', metric: true, imperial: false, maxWidth: 120 }).addTo(map);
+function showNotice(msg,ms=3500){
+  const n=document.getElementById("notice"); n.textContent=msg; n.style.display="block";
+  clearTimeout(n._t); n._t=setTimeout(()=>n.style.display="none",ms);
+}
+function normScale(v){ if(v===undefined||v===null) return null; return String(v).trim().split(/[;,+-]/)[0]; }
+function activeTagFor(p){
+  for(const tag of settings.priority){
+    if(settings.enabled[tag] && p[tag]!==undefined && p[tag]!==null && String(p[tag]).trim()!=="") return tag;
+  }
+  return null;
+}
+function colorFor(p){
+  const tag=activeTagFor(p);
+  if(!tag) return "#9ca3af";
+  const v=normScale(p[tag]);
+  return TAGS[tag].colors[v]||"#6b7280";
+}
+function isMtbRoute(p){
+  const osmId = String(p["@id"] || p.id || "");
+  return (
+    p.route === "mtb" &&
+    (
+      p.type === "route" ||
+      osmId.startsWith("relation/")
+    )
+  );
+}
+function isRated(p){
+  return activeTagFor(p)!==null;
+}
+function isLineFeature(f){
+  return f && f.geometry && ["LineString","MultiLineString"].includes(f.geometry.type);
+}
+function passesFilter(p){
+  if(isMtbRoute(p) && !settings.showRoutes) return false;
+  if(!isMtbRoute(p) && !isRated(p) && !settings.showUnrated) return false;
 
-    const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap-Mitwirkende',
-      updateWhenIdle: true,
-      keepBuffer: 2
-    });
-    const aerial = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      attribution: 'Tiles © Esri, Maxar, Earthstar Geographics und weitere',
-      updateWhenIdle: true,
-      keepBuffer: 2
-    });
-    osm.addTo(map);
+  const tag=activeTagFor(p);
+  if(!tag) return true;
 
-    const settings = {
-      showUnrated: false,
-      showRoutes: false,
-      showTrailDirection: true,
-      highContrast: true,
-      followLocation: false,
-      theme: 'system'
+  const maximum=settings.maxByTag?.[tag] ?? "all";
+  if(maximum==="all") return true;
+
+  const v=parseInt(normScale(p[tag]),10);
+  return Number.isNaN(v) || v<=parseInt(maximum,10);
+}
+function styleMain(f){
+  const p=f.properties||{};
+  if(isMtbRoute(p)){
+    return {
+      color:"#6b7280",
+      weight:settings.highContrast?3:2,
+      opacity:passesFilter(p)?0.8:0,
+      dashArray:"7 7",
+      smoothFactor:1.5
     };
-    applyTheme(settings.theme || 'system');
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
-      if ((settings.theme || 'system') === 'system') applyTheme('system');
-    });
+  }
+  return {
+    color:colorFor(p),
+    weight:settings.highContrast?4:3,
+    opacity:passesFilter(p)?0.95:0,
+    smoothFactor:1.5
+  };
+}
+function styleOutline(f){
+  const p=f.properties||{};
+  if(isMtbRoute(p)){
+    return {color:"#ffffff",weight:settings.highContrast?6:4,opacity:passesFilter(p)?0.65:0,dashArray:"7 7",smoothFactor:1.5};
+  }
+  return {color:"#ffffff",weight:settings.highContrast?7:5,opacity:passesFilter(p)?0.85:0,smoothFactor:1.5};
+}
 
-    document.getElementById('osmBtn').addEventListener('click', () => {
-      map.removeLayer(aerial);
-      if (!map.hasLayer(osm)) osm.addTo(map);
-      document.getElementById('osmBtn').classList.add('active');
-      document.getElementById('aerialBtn').classList.remove('active');
-    });
-    document.getElementById('aerialBtn').addEventListener('click', () => {
-      map.removeLayer(osm);
-      if (!map.hasLayer(aerial)) aerial.addTo(map);
-      document.getElementById('aerialBtn').classList.add('active');
-      document.getElementById('osmBtn').classList.remove('active');
-    });
+function popupHtml(p,{hideLegacyElevation=false,showPreparedLength=false}={}){
+  const name=p.name||p["mtb:name"]||"Unbenannter Trail";
+  const tags=["mtb:scale","mtb:scale:imba","mtb:scale:uphill"];
+  let rows=`<div class="sheet-title"><h3>${escapeHtml(name)}</h3><button id="sheetCloseBtn" class="sheet-close" aria-label="Details schliessen">×</button></div><div class="sheet-grid">`;
+  for(const t of tags){
+    rows+=`<div>${TAGS[t].label}</div><div>${p[t]!==undefined?escapeHtml(String(p[t])):"–"}</div>`;
+  }
+  rows+=`<div>Oberfläche</div><div>${escapeHtml(p.surface||"–")}</div>`;
+  rows+=`<div>Tracktype</div><div>${escapeHtml(p.tracktype||"–")}</div>`;
 
-    document.getElementById('settingsBtn').addEventListener('click', () => {
-      document.getElementById('drawer').classList.toggle('open');
-    });
-    document.getElementById('closeSettings').addEventListener('click', () => {
-      document.getElementById('drawer').classList.remove('open');
-    });
-    document.getElementById('northBtn').addEventListener('click', () => {
-      if (typeof map.setBearing === 'function') map.setBearing(0);
-      if (typeof map.getContainer === 'function' && map.getContainer()) map.getContainer().focus?.();
-    });
+  if(p.incline!==undefined && String(p.incline).trim()!==""){
+    rows+=`<div>Steigung</div><div>${escapeHtml(String(p.incline))} <span class="small">(OSM)</span></div>`;
+  }else if(p.max_uphill_percent!==undefined || p.max_downhill_percent!==undefined){
+    const up=p.max_uphill_percent!==undefined ? `${escapeHtml(String(p.max_uphill_percent))} %` : "–";
+    const down=p.max_downhill_percent!==undefined ? `${escapeHtml(String(p.max_downhill_percent))} %` : "–";
+    rows+=`<div>Max. Steigung</div><div>${up} <span class="small">(Geländemodell)</span></div>`;
+    rows+=`<div>Max. Gefälle</div><div>${down} <span class="small">(Geländemodell)</span></div>`;
+  }else{
+    rows+=`<div>Steigung</div><div><span class="small">Keine Steigungsangabe vorhanden</span></div>`;
+  }
+  if(showPreparedLength){
+    rows+=`<div>Trail-Länge</div><div id="trailLengthValue"><span class="small">Wird geladen…</span></div>`;
+  }
 
-    let locationMarker = null;
-    let accuracyCircle = null;
-    let watchId = null;
-    let currentHeading = null;
-    let orientationListenerInstalled = false;
-    let lastHeadingUpdate = 0;
-    let pendingHeading = null;
-    let headingTimer = null;
-    let oppositeHeadingCandidate = null;
-    let oppositeHeadingCount = 0;
-    const HEADING_UPDATE_INTERVAL_MS = 200;
-    const HEADING_SMOOTHING_FACTOR = 0.28;
-    const LARGE_HEADING_JUMP_DEG = 120;
-    const REQUIRED_LARGE_JUMP_SAMPLES = 3;
-    const CANDIDATE_TOLERANCE_DEG = 35;
+  if(!hideLegacyElevation &&
+    p.elevation_higher_m!==undefined &&
+    p.elevation_lower_m!==undefined &&
+    p.elevation_difference_m!==undefined
+  ){
+    rows+=`<div>Höherer Punkt</div><div>${escapeHtml(String(p.elevation_higher_m))} m ü. M.</div>`;
+    rows+=`<div>Tieferer Punkt</div><div>${escapeHtml(String(p.elevation_lower_m))} m ü. M.</div>`;
+    rows+=`<div>Höhendifferenz</div><div>${escapeHtml(String(p.elevation_difference_m))} m</div>`;
+    rows+=`<div>Höhenquelle</div><div>${escapeHtml(p.elevation_source||"swisstopo")}</div>`;
+  }else if(!hideLegacyElevation && p.elevation_status==="outside_switzerland"){
+    rows+=`<div>Höhenangaben</div><div><span class="small">Trail liegt ausserhalb der Schweiz</span></div>`;
+  }else if(!hideLegacyElevation && p.elevation_status==="no_swiss_segment"){
+    rows+=`<div>Höhenangaben</div><div><span class="small">Kein auswertbarer Schweizer Abschnitt</span></div>`;
+  }else if(!hideLegacyElevation){
+    rows+=`<div>Höhenangaben</div><div><span class="small">Noch nicht berechnet</span></div>`;
+  }
 
-    function normalizeAngle(angle) {
-      return ((angle % 360) + 360) % 360;
-    }
-    function shortestAngleDifference(from, to) {
-      return ((to - from + 540) % 360) - 180;
-    }
-    function circularDistance(a, b) {
-      return Math.abs(shortestAngleDifference(a, b));
-    }
+  rows+=`</div>`;
+  return rows;
+}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
 
-    function headingIcon() {
-      const mapBearing = typeof map.getBearing === 'function' ? map.getBearing() : 0;
-      const headingRotation = Number.isFinite(currentHeading) ? currentHeading - mapBearing : -mapBearing;
-      return L.divIcon({
-        className: '',
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
-        html: `
-          <div class="heading-marker" style="transform: rotate(${headingRotation}deg)">
-            <div class="heading-arrow"></div>
-            <div class="heading-dot"></div>
-          </div>
-        `
+function elevationFeatureId(feature){
+  return String(feature?.id||feature?.properties?.["@id"]||"");
+}
+
+function isElevationProfileFeature(feature){
+  return Boolean(feature?.properties?.elevation_profile_ref);
+}
+
+function elevationChunkForFeature(feature){
+  const properties=feature?.properties||{};
+  const rawChunk=String(properties.elevation_profile_chunk||"").trim();
+  if(rawChunk){
+    const chunk=rawChunk.padStart(2,"0");
+    if(/^\d{2}$/.test(chunk)) return chunk;
+  }
+  // Fallback für bereits geladene Daten ohne den neuen Referenzmarker.
+  return feature?._trailFile || null;
+}
+
+function loadElevationProfiles(feature){
+  const chunk=elevationChunkForFeature(feature);
+  if(!chunk) return Promise.reject(new Error("Profilchunk konnte nicht bestimmt werden"));
+  const version=String(feature?.properties?.elevation_profile_version||"legacy");
+  const cacheKey=`${chunk}:${version}`;
+  if(!elevationProfilesCache.has(cacheKey)){
+    const request=fetch(`elevation-profiles-${chunk}.json?v=${encodeURIComponent(version)}`)
+      .then(response=>{
+        if(response.status===404) return {features:{}};
+        if(!response.ok) throw new Error("Höhenprofile konnten nicht geladen werden");
+        return response.json();
+      })
+      .then(document=>{
+        if(document.chunk && document.chunk!==chunk) throw new Error("Profilchunk passt nicht zum Trail");
+        if(version!=="legacy" && document.revision && document.revision!==version) throw new Error("Höhenprofilversion passt nicht zum Trail");
+        return document.features||{};
       });
+    elevationProfilesCache.set(cacheKey,request);
+    request.catch(()=>elevationProfilesCache.delete(cacheKey));
+  }
+  return elevationProfilesCache.get(cacheKey);
+}
+
+function elevationMetricsHtml(profile){
+  const value=(key,suffix="")=>Number.isFinite(Number(profile[key])) ? `${escapeHtml(String(profile[key]))}${suffix}` : "–";
+  return `<div class="sheet-grid">
+    <div>Startpunkt</div><div>${value("elevation_start_m"," m ü. M.")}</div>
+    <div>Endpunkt</div><div>${value("elevation_end_m"," m ü. M.")}</div>
+    <div>Höhendifferenz</div><div>${value("elevation_difference_m"," m")}</div>
+    <div>Aufstieg</div><div>${value("elevation_gain_m"," m")}</div>
+    <div>Abstieg</div><div>${value("elevation_loss_m"," m")}</div>
+    <div>Max. Steigung</div><div>${value("max_uphill_percent"," %")}</div>
+    <div>Max. Gefälle</div><div>${value("max_downhill_percent"," %")}</div>
+  </div>
+  <button id="elevationProfileToggle" class="elevation-profile-toggle" type="button" aria-expanded="false">▶ Höhenprofil</button>
+  <div id="elevationProfileChart" hidden></div>`;
+}
+
+function formatTrailLength(meters){
+  const value=Number(meters);
+  if(!Number.isFinite(value)||value<0) return "–";
+  if(value>=1000) return `${(value/1000).toLocaleString("de-CH",{minimumFractionDigits:1,maximumFractionDigits:1})} km`;
+  return `${Math.round(value).toLocaleString("de-CH")} m`;
+}
+
+function elevationChartSvg(profile){
+  const points=(profile.elevation_profile||[])
+    .map(point=>[Number(point?.[0]),Number(point?.[1])])
+    .filter(point=>Number.isFinite(point[0])&&Number.isFinite(point[1]));
+  if(points.length<2) return '<div class="small">Kein darstellbares Höhenprofil vorhanden</div>';
+  const width=600,height=170,padX=38,padTop=14,padBottom=28;
+  const minDistance=Math.min(...points.map(point=>point[0]));
+  const maxDistance=Math.max(...points.map(point=>point[0]));
+  const minElevation=Math.min(...points.map(point=>point[1]));
+  const maxElevation=Math.max(...points.map(point=>point[1]));
+  const distanceRange=Math.max(1,maxDistance-minDistance);
+  const elevationRange=Math.max(1,maxElevation-minElevation);
+  const x=distance=>padX+(distance-minDistance)/distanceRange*(width-padX*2);
+  const y=elevation=>padTop+(maxElevation-elevation)/elevationRange*(height-padTop-padBottom);
+  const line=points.map(point=>`${x(point[0]).toFixed(1)},${y(point[1]).toFixed(1)}`).join(" ");
+  const baseline=height-padBottom;
+  const area=`${padX},${baseline} ${line} ${width-padX},${baseline}`;
+  const distanceLabel=formatTrailLength(maxDistance);
+  return `<svg class="elevation-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Höhenprofil von ${Math.round(minElevation)} bis ${Math.round(maxElevation)} Metern">
+    <line class="axis" x1="${padX}" y1="${baseline}" x2="${width-padX}" y2="${baseline}"></line>
+    <polygon class="area" points="${area}"></polygon>
+    <polyline class="line" points="${line}"></polyline>
+    <text x="2" y="${padTop+4}">${Math.round(maxElevation)} m</text>
+    <text x="2" y="${baseline}">${Math.round(minElevation)} m</text>
+    <text x="${padX}" y="${height-6}">0</text>
+    <text x="${width-padX}" y="${height-6}" text-anchor="end">${distanceLabel}</text>
+  </svg>`;
+}
+
+function installElevationToggle(profile){
+  const toggle=document.getElementById("elevationProfileToggle");
+  const chart=document.getElementById("elevationProfileChart");
+  if(!toggle||!chart) return;
+  toggle.onclick=()=>{
+    const expanded=toggle.getAttribute("aria-expanded")==="true";
+    toggle.setAttribute("aria-expanded",String(!expanded));
+    toggle.textContent=expanded ? "▶ Höhenprofil" : "▼ Höhenprofil";
+    chart.hidden=expanded;
+    if(!expanded && !chart.hasChildNodes()) chart.innerHTML=elevationChartSvg(profile);
+  };
+}
+
+async function renderElevationProfile(feature,requestId){
+  const target=document.getElementById("elevationProfileContent");
+  if(!target) return;
+  try{
+    const profiles=await loadElevationProfiles(feature);
+    if(elevationFeatureId(feature)!==requestId || selectedLayer?.feature!==feature) return;
+    const currentTarget=document.getElementById("elevationProfileContent");
+    if(!currentTarget) return;
+    const profileRef=String(feature?.properties?.elevation_profile_ref||requestId);
+    const profile=profiles[profileRef];
+    const lengthTarget=document.getElementById("trailLengthValue");
+    if(!profile){
+      if(lengthTarget) lengthTarget.textContent="–";
+      currentTarget.innerHTML='<span class="small">Noch kein vorbereitetes Höhenprofil vorhanden</span>';
+      return;
+    }
+    const expectedHash=String(feature?.properties?.elevation_profile_hash||"");
+    if(expectedHash && profile.geometry_hash!==expectedHash){
+      if(lengthTarget) lengthTarget.textContent="–";
+      currentTarget.innerHTML='<span class="small">Höhenprofil passt nicht zur aktuellen Geometrie</span>';
+      return;
+    }
+    if(lengthTarget) lengthTarget.textContent=formatTrailLength(profile.elevation_length_m);
+    currentTarget.innerHTML=elevationMetricsHtml(profile);
+    installElevationToggle(profile);
+  }catch{
+    const currentTarget=document.getElementById("elevationProfileContent");
+    const lengthTarget=document.getElementById("trailLengthValue");
+    if(lengthTarget) lengthTarget.textContent="–";
+    if(currentTarget && selectedLayer?.feature===feature){
+      currentTarget.innerHTML='<span class="small">Höhenprofil konnte nicht geladen werden</span>';
+    }
+  }
+}
+
+function closeSheet(){
+  document.getElementById("sheet").classList.remove("open");
+  if(selectedLayer && trailLayer){
+    trailLayer.resetStyle(selectedLayer);
+    selectedLayer=null;
+  }
+}
+function selectFeature(layer,f){
+  if(selectedLayer) trailLayer.resetStyle(selectedLayer);
+  selectedLayer=layer;
+  layer.setStyle({weight:8,color:"#fde047",opacity:1});
+  layer.bringToFront();
+  const sheet=document.getElementById("sheet");
+  const hasElevationProfile=isElevationProfileFeature(f);
+  const elevationId=elevationFeatureId(f);
+  sheet.innerHTML=popupHtml(f.properties||{},{hideLegacyElevation:hasElevationProfile,showPreparedLength:hasElevationProfile});
+  if(hasElevationProfile){
+    sheet.innerHTML+=`<div class="elevation-profile-section"><strong>Höhenangaben</strong><div id="elevationProfileContent" class="small" style="margin-top:8px">Lade vorbereitetes Höhenprofil…</div></div>`;
+  }
+  sheet.classList.add("open");
+  setTimeout(()=>{
+    const closeBtn=document.getElementById("sheetCloseBtn");
+    if(closeBtn) closeBtn.onclick=closeSheet;
+    if(hasElevationProfile) renderElevationProfile(f,elevationId);
+  },0);
+}
+function featureId(f){return (f.id||"")+"|"+((f.properties||{}).name||"")+"|"+JSON.stringify(f.geometry.coordinates[0]||[]).slice(0,80)}
+
+function rebuildLayers(fit=false){
+  if(trailLayer) map.removeLayer(trailLayer);
+  if(outlineLayer) map.removeLayer(outlineLayer);
+
+  searchIndex=[];
+  const layerFilter=f=>isLineFeature(f);
+
+  outlineLayer=L.geoJSON(geoData,{
+    filter:layerFilter,
+    renderer:outlineRenderer,
+    pane:"trailOutlinePane",
+    style:styleOutline,
+    interactive:false
+  }).addTo(map);
+
+  trailLayer=L.geoJSON(geoData,{
+    filter:layerFilter,
+    renderer:trailRenderer,
+    pane:"trailPane",
+    style:styleMain,
+    onEachFeature:(f,l)=>{
+      // Der sichtbare Layer übernimmt auch die Treffererkennung.
+      // Die grössere Canvas-Toleranz ersetzt den früheren dritten GeoJSON-Layer.
+      l.on("click",()=>{
+        if(passesFilter(f.properties||{})) selectFeature(l,f);
+      });
+      const p=f.properties||{}, name=p.name||p["mtb:name"];
+      if(name) searchIndex.push({name:String(name),layer:l,feature:f});
+    }
+  }).addTo(map);
+
+  searchIndex=[...new Map(searchIndex.map(x=>[x.name+"|"+featureId(x.feature),x])).values()];
+  if(fit && trailLayer.getBounds().isValid()) map.fitBounds(trailLayer.getBounds(),{padding:[20,20]});
+  renderLegend();
+}
+function updateLayerStyles(){
+  if(outlineLayer) outlineLayer.setStyle(styleOutline);
+  if(trailLayer) trailLayer.setStyle(styleMain);
+  renderLegend();
+}
+
+// Beim Verschieben, Zoomen und Drehen wird die weisse Kontur kurz
+// ausgeblendet. Dadurch muss während der Geste nur eine Vektorebene
+// zusammengesetzt werden. Nach dem Loslassen erscheint sie sofort wieder.
+let interactionDepth=0;
+let restoreOutlineTimer=null;
+
+function beginFastInteraction(){
+  interactionDepth++;
+  clearTimeout(restoreOutlineTimer);
+  const pane=map.getPane("trailOutlinePane");
+  if(pane) pane.style.visibility="hidden";
+}
+
+function endFastInteraction(){
+  interactionDepth=Math.max(0,interactionDepth-1);
+  if(interactionDepth!==0) return;
+  clearTimeout(restoreOutlineTimer);
+  restoreOutlineTimer=setTimeout(()=>{
+    const pane=map.getPane("trailOutlinePane");
+    if(pane) pane.style.visibility="";
+  },60);
+}
+
+map.on("movestart zoomstart rotatestart",beginFastInteraction);
+map.on("moveend zoomend rotateend",endFastInteraction);
+
+function renderLegend(){
+  const body=document.getElementById("legendBody");
+  let html="";
+  for(const tag of settings.priority){
+    if(!settings.enabled[tag]) continue;
+    const cfg=TAGS[tag];
+    const doc=TAG_DOCS[tag];
+    const head=doc
+      ? `<div class="legend-group"><strong>${cfg.label}</strong><a class="info-link" href="${doc}" target="_blank" rel="noopener noreferrer" aria-label="Dokumentation zu ${cfg.label}" title="OSM-Dokumentation zu ${cfg.label} öffnen">i</a></div>`
+      : `<div class="legend-group"><strong>${cfg.label}</strong></div>`;
+    html+=head;
+    for(const v of cfg.order){
+      const label=cfg.names?.[v]||`${cfg.prefix}${v}`;
+      html+=`<div class="legend-row"><span class="swatch" style="background:${cfg.colors[v]}"></span><span>${label}</span></div>`;
+    }
+  }
+  if(settings.showUnrated){
+    html+=`<div class="legend-group" style="margin-top:8px"><strong>Weitere Trails</strong></div>
+      <div class="legend-row"><span class="swatch" style="background:#9ca3af"></span><span>Unbewertet</span></div>`;
+  }
+  if(settings.showRoutes){
+    html+=`<div class="legend-row"><span class="swatch" style="background:repeating-linear-gradient(90deg,#6b7280 0 8px,transparent 8px 14px)"></span><span>MTB-Route</span></div>`;
+  }
+  if(!html) html='<div class="small">Keine Datenebene aktiviert</div>';
+  body.innerHTML=html;
+}
+
+const TRAIL_FILES=["trails-01.geojson","trails-02.geojson","trails-03.geojson","trails-04.geojson","trails-05.geojson","trails-06.geojson","trails-07.geojson","trails-08.geojson","trails-09.geojson","trails-10.geojson"];
+
+async function loadData(cacheBust=false){
+  if(cacheBust) elevationProfilesCache.clear();
+  const suffix=cacheBust ? `?t=${Date.now()}` : "";
+  const collections=await Promise.all(TRAIL_FILES.map(async file=>{
+    const r=await fetch(file+suffix,{cache:cacheBust?"reload":"default"});
+    if(!r.ok) throw new Error(`${file} konnte nicht geladen werden`);
+    const document=await r.json();
+    const chunk=file.slice(7,9);
+    for(const feature of document.features||[]) feature._trailFile=chunk;
+    return document;
+  }));
+  geoData={
+    type:"FeatureCollection",
+    features:collections.flatMap(c=>c.features||[])
+  };
+  searchIndex=[];
+  rebuildLayers(!map._loaded);
+  document.getElementById("dataStatus").textContent=
+    `${geoData.features?.length||0} OSM-Objekte geladen · Canvas-Darstellung aktiv`;
+}
+
+async function loadMetadata(cacheBust=false){
+  const suffix=cacheBust ? `?t=${Date.now()}` : "";
+  const box=document.getElementById("metaStatus");
+  try{
+    const r=await fetch("data-meta.json"+suffix,{cache:cacheBust?"reload":"default"});
+    if(!r.ok) throw new Error();
+    const m=await r.json();
+    const updated=m.updated_at ? new Date(m.updated_at).toLocaleString("de-CH") : "–";
+    box.innerHTML=[
+      `App-Version: ${escapeHtml(m.app_version||"–")}`,
+      `Datenstand: ${escapeHtml(m.data_version||"–")}`,
+      `Aktualisiert: ${escapeHtml(updated)}`,
+      `Trails: ${Number(m.trail_count||0).toLocaleString("de-CH")}`,
+      `MTB-Routen: ${Number(m.route_count||0).toLocaleString("de-CH")}`,
+      `Quelle: ${escapeHtml(m.source||"OpenStreetMap")}`
+    ].join("<br>");
+  }catch{
+    box.textContent="Keine Metadaten verfügbar";
+  }
+}
+
+function switchBase(which){
+  if(which==="osm"){map.removeLayer(aerial);osm.addTo(map);}
+  else{map.removeLayer(osm);aerial.addTo(map);}
+  document.getElementById("osmBtn").classList.toggle("active",which==="osm");
+  document.getElementById("aerialBtn").classList.toggle("active",which==="aerial");
+}
+document.getElementById("osmBtn").onclick=()=>switchBase("osm");
+document.getElementById("aerialBtn").onclick=()=>switchBase("aerial");
+document.getElementById("northBtn").onclick=()=>{
+  if(typeof map.setBearing==="function") map.setBearing(0);
+};
+function updateNorthArrow(){
+  const bearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
+  document.getElementById("northBtn").style.transform=`rotate(${bearing}deg)`;
+}
+map.on("rotate",()=>{
+  updateNorthArrow();
+  updateHeadingMarker();
+});
+updateNorthArrow();
+
+/* Kleine unbeabsichtigte Zwei-Finger-Drehungen werden nach dem Loslassen
+   auf die Ausgangsausrichtung zurückgesetzt. Bewusste Drehungen ab 12° bleiben. */
+let gestureStartBearing=null;
+const mapContainer=map.getContainer();
+mapContainer.addEventListener("touchstart",e=>{
+  if(e.touches.length===2 && typeof map.getBearing==="function"){
+    gestureStartBearing=map.getBearing();
+  }
+},{passive:true});
+mapContainer.addEventListener("touchend",()=>{
+  if(gestureStartBearing===null || typeof map.getBearing!=="function") return;
+  const current=map.getBearing();
+  let delta=Math.abs(current-gestureStartBearing)%360;
+  if(delta>180) delta=360-delta;
+  if(delta<12 && typeof map.setBearing==="function"){
+    map.setBearing(gestureStartBearing);
+  }
+  gestureStartBearing=null;
+},{passive:true});
+
+
+function headingIcon(){
+  const mapBearing=typeof map.getBearing==="function" ? map.getBearing() : 0;
+  const rotation=Number.isFinite(currentHeading) ? currentHeading-mapBearing : -mapBearing;
+  return L.divIcon({
+    className:"",
+    iconSize:[34,34],
+    iconAnchor:[17,17],
+    html:`<div class="heading-marker"><div class="heading-arrow" style="transform:rotate(${rotation}deg)"></div><div class="heading-dot"></div></div>`
+  });
+}
+
+function updateHeadingMarker(){
+  if(locationMarker) locationMarker.setIcon(headingIcon());
+}
+
+let lastHeadingUpdate=0;
+let pendingHeading=null;
+let headingTimer=null;
+let oppositeHeadingCandidate=null;
+let oppositeHeadingCount=0;
+
+const HEADING_UPDATE_INTERVAL_MS=200;
+const HEADING_SMOOTHING_FACTOR=0.28;
+const LARGE_HEADING_JUMP_DEG=120;
+const REQUIRED_LARGE_JUMP_SAMPLES=3;
+const CANDIDATE_TOLERANCE_DEG=35;
+
+function normalizeAngle(angle){
+  return ((angle%360)+360)%360;
+}
+
+function shortestAngleDifference(from,to){
+  return ((to-from+540)%360)-180;
+}
+
+function circularDistance(a,b){
+  return Math.abs(shortestAngleDifference(a,b));
+}
+
+function filterHeading(rawHeading){
+  const normalized=normalizeAngle(rawHeading);
+
+  if(!Number.isFinite(currentHeading)){
+    oppositeHeadingCandidate=null;
+    oppositeHeadingCount=0;
+    return normalized;
+  }
+
+  const jump=Math.abs(shortestAngleDifference(currentHeading,normalized));
+
+  // Einzelne Sprünge um ungefähr 180° sind bei Smartphone-Sensoren häufig.
+  // Ein grosser Richtungswechsel wird erst übernommen, wenn mehrere
+  // aufeinanderfolgende Messungen dieselbe neue Richtung bestätigen.
+  if(jump>LARGE_HEADING_JUMP_DEG){
+    if(
+      oppositeHeadingCandidate!==null &&
+      circularDistance(oppositeHeadingCandidate,normalized)<=CANDIDATE_TOLERANCE_DEG
+    ){
+      oppositeHeadingCount++;
+      const candidateStep=shortestAngleDifference(oppositeHeadingCandidate,normalized);
+      oppositeHeadingCandidate=normalizeAngle(oppositeHeadingCandidate+candidateStep*0.5);
+    }else{
+      oppositeHeadingCandidate=normalized;
+      oppositeHeadingCount=1;
     }
 
-    function updateHeadingMarker() {
-      if (locationMarker) locationMarker.setIcon(headingIcon());
+    if(oppositeHeadingCount<REQUIRED_LARGE_JUMP_SAMPLES){
+      return null;
     }
 
-    function filterHeading(rawHeading) {
-      const normalized = normalizeAngle(rawHeading);
-      if (!Number.isFinite(currentHeading)) {
-        oppositeHeadingCandidate = null;
-        oppositeHeadingCount = 0;
-        return normalized;
-      }
+    const confirmed=oppositeHeadingCandidate;
+    oppositeHeadingCandidate=null;
+    oppositeHeadingCount=0;
+    return confirmed;
+  }
 
-      const jump = Math.abs(shortestAngleDifference(currentHeading, normalized));
-      if (jump > LARGE_HEADING_JUMP_DEG) {
-        if (oppositeHeadingCandidate !== null && circularDistance(oppositeHeadingCandidate, normalized) <= CANDIDATE_TOLERANCE_DEG) {
-          oppositeHeadingCount++;
-          const candidateStep = shortestAngleDifference(oppositeHeadingCandidate, normalized);
-          oppositeHeadingCandidate = normalizeAngle(oppositeHeadingCandidate + candidateStep * 0.5);
-        } else {
-          oppositeHeadingCandidate = normalized;
-          oppositeHeadingCount = 1;
-        }
-        if (oppositeHeadingCount < REQUIRED_LARGE_JUMP_SAMPLES) return null;
-        const confirmed = oppositeHeadingCandidate;
-        oppositeHeadingCandidate = null;
-        oppositeHeadingCount = 0;
-        return confirmed;
-      }
+  oppositeHeadingCandidate=null;
+  oppositeHeadingCount=0;
 
-      oppositeHeadingCandidate = null;
-      oppositeHeadingCount = 0;
-      const delta = shortestAngleDifference(currentHeading, normalized);
-      return normalizeAngle(currentHeading + delta * HEADING_SMOOTHING_FACTOR);
-    }
+  // Kreisförmige Glättung, damit auch der Übergang 359° → 0° ruhig bleibt.
+  const delta=shortestAngleDifference(currentHeading,normalized);
+  return normalizeAngle(currentHeading+delta*HEADING_SMOOTHING_FACTOR);
+}
 
-    function applyPendingHeading() {
-      headingTimer = null;
-      if (pendingHeading === null) return;
-      currentHeading = pendingHeading;
-      pendingHeading = null;
-      lastHeadingUpdate = performance.now();
-      updateHeadingMarker();
-    }
+function applyPendingHeading(){
+  headingTimer=null;
+  if(pendingHeading===null) return;
+  currentHeading=pendingHeading;
+  pendingHeading=null;
+  lastHeadingUpdate=performance.now();
+  updateHeadingMarker();
+}
 
-    function onOrientation(event) {
-      let heading = null;
-      if (typeof event.webkitCompassHeading === 'number') heading = event.webkitCompassHeading;
-      else if (typeof event.alpha === 'number') heading = (360 - event.alpha) % 360;
-      if (heading === null) return;
+function onOrientation(event){
+  let heading=null;
+  if(typeof event.webkitCompassHeading==="number") heading=event.webkitCompassHeading;
+  else if(typeof event.alpha==="number") heading=(360-event.alpha)%360;
+  if(heading===null) return;
 
-      const filteredHeading = filterHeading(heading);
-      if (filteredHeading === null) return;
-      pendingHeading = filteredHeading;
-      const elapsed = performance.now() - lastHeadingUpdate;
-      if (elapsed >= HEADING_UPDATE_INTERVAL_MS) {
-        applyPendingHeading();
-      } else if (!headingTimer) {
-        headingTimer = setTimeout(applyPendingHeading, HEADING_UPDATE_INTERVAL_MS - elapsed);
-      }
-    }
+  const filteredHeading=filterHeading(heading);
+  if(filteredHeading===null) return;
 
-    async function enableOrientation() {
-      if (orientationListenerInstalled) return;
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const permission = await DeviceOrientationEvent.requestPermission();
-          if (permission !== 'granted') return;
-        } catch {
-          return;
-        }
-      }
-      window.addEventListener('deviceorientationabsolute', onOrientation, true);
-      window.addEventListener('deviceorientation', onOrientation, true);
-      orientationListenerInstalled = true;
-    }
+  pendingHeading=filteredHeading;
+  const elapsed=performance.now()-lastHeadingUpdate;
 
-    function updateLocation(pos) {
-      const ll = [pos.coords.latitude, pos.coords.longitude];
-      const acc = pos.coords.accuracy;
-      if (!locationMarker) {
-        locationMarker = L.marker(ll, {
-          icon: headingIcon(),
-          interactive: false,
-          zIndexOffset: 1000,
-          rotateWithView: false
-        }).addTo(map);
-      } else {
-        locationMarker.setLatLng(ll);
-      }
-      if (!accuracyCircle) {
-        accuracyCircle = L.circle(ll, { radius: acc, color: '#2563eb', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
-      } else {
-        accuracyCircle.setLatLng(ll).setRadius(acc);
-      }
-      if (settings.followLocation) map.setView(ll, Math.max(map.getZoom(), 16), { animate: false });
-    }
+  if(elapsed>=HEADING_UPDATE_INTERVAL_MS){
+    applyPendingHeading();
+  }else if(!headingTimer){
+    headingTimer=setTimeout(applyPendingHeading,HEADING_UPDATE_INTERVAL_MS-elapsed);
+  }
+}
 
-    async function locate({ silent = false } = {}) {
-      if (!navigator.geolocation) {
-        if (!silent) showNotice('Standort wird von diesem Browser nicht unterstützt');
-        return;
-      }
-      await enableOrientation();
-      navigator.geolocation.getCurrentPosition(
-        (p) => {
-          updateLocation(p);
-          map.setView([p.coords.latitude, p.coords.longitude], START_ZOOM, { animate: false });
-        },
-        (e) => {
-          if (!silent) {
-            showNotice(e.code === 1 ? 'Standortberechtigung wurde verweigert – Gütschwald wird angezeigt' : 'Standort konnte nicht bestimmt werden – Gütschwald wird angezeigt');
-          }
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
-      );
+async function enableOrientation(){
+  if(orientationListenerInstalled) return;
+  if(typeof DeviceOrientationEvent!=="undefined" && typeof DeviceOrientationEvent.requestPermission==="function"){
+    try{
+      const permission=await DeviceOrientationEvent.requestPermission();
+      if(permission!=="granted") return;
+    }catch{return;}
+  }
+  window.addEventListener("deviceorientationabsolute",onOrientation,true);
+  window.addEventListener("deviceorientation",onOrientation,true);
+  orientationListenerInstalled=true;
+}
 
-      if (watchId === null) {
-        watchId = navigator.geolocation.watchPosition(
-          (p) => {
-            const hadNoLocation = !locationMarker;
-            updateLocation(p);
-            if (hadNoLocation) {
-              map.setView([p.coords.latitude, p.coords.longitude], START_ZOOM, { animate: false });
-            }
-          },
-          () => {},
-          { enableHighAccuracy: true, timeout: 20000, maximumAge: 3000 }
+function updateLocation(pos){
+  const ll=[pos.coords.latitude,pos.coords.longitude], acc=pos.coords.accuracy;
+  if(!locationMarker) locationMarker=L.marker(ll,{icon:headingIcon(),interactive:false,zIndexOffset:1000,rotateWithView:false}).addTo(map);
+  else locationMarker.setLatLng(ll);
+  if(!accuracyCircle) accuracyCircle=L.circle(ll,{radius:acc,color:"#2563eb",weight:1,fillOpacity:.08,interactive:false}).addTo(map);
+  else accuracyCircle.setLatLng(ll).setRadius(acc);
+  if(settings.followLocation) map.setView(ll,Math.max(map.getZoom(),16),{animate:false});
+}
+async function locate({silent=false}={}){
+  if(!navigator.geolocation){
+    if(!silent) showNotice("Standort wird von diesem Browser nicht unterstützt");
+    return;
+  }
+
+  await enableOrientation();
+
+  navigator.geolocation.getCurrentPosition(
+    p=>{
+      updateLocation(p);
+      map.setView([p.coords.latitude,p.coords.longitude],START_ZOOM,{animate:false});
+    },
+    e=>{
+      // Bei fehlender Berechtigung oder Zeitüberschreitung bleibt die Karte
+      // im Gütschwald auf Zoom 16.
+      if(!silent){
+        showNotice(
+          e.code===1
+            ?"Standortberechtigung wurde verweigert – Gütschwald wird angezeigt"
+            :"Standort konnte nicht bestimmt werden – Gütschwald wird angezeigt"
         );
       }
+    },
+    {enableHighAccuracy:true,timeout:15000,maximumAge:5000}
+  );
+
+  if(watchId===null){
+    watchId=navigator.geolocation.watchPosition(
+      p=>{
+        const hadNoLocation=!locationMarker;
+        updateLocation(p);
+        if(hadNoLocation){
+          map.setView([p.coords.latitude,p.coords.longitude],START_ZOOM,{animate:false});
+        }
+      },
+      ()=>{},
+      {enableHighAccuracy:true,timeout:20000,maximumAge:3000}
+    );
+  }
+}
+document.getElementById("locateBtn").onclick=locate;
+
+function haversine(a,b){
+  const R=6371000, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+document.getElementById("nearestBtn").onclick=()=>{
+  if(!locationMarker){showNotice("Zuerst Standort bestimmen");locate();return;}
+  const here=locationMarker.getLatLng(); let best=null;
+
+  trailLayer.eachLayer(l=>{
+    const p=l.feature?.properties||{};
+
+    // Nur aktuell sichtbare Daten berücksichtigen.
+    if(!passesFilter(p)) return;
+
+    const c=l.getBounds?.().getCenter?.();
+    if(!c) return;
+
+    const d=haversine(here,c);
+    if(!best||d<best.d) best={l,d};
+  });
+
+  if(best){
+    map.fitBounds(best.l.getBounds(),{maxZoom:17,padding:[40,40]});
+    selectFeature(best.l,best.l.feature);
+    showNotice(`Nächster angezeigter Trail: ca. ${Math.round(best.d)} m`);
+  }else{
+    showNotice("Kein angezeigter Trail gefunden");
+  }
+};
+
+let searchTimer=null;
+let placeMarker=null;
+
+function showSearchResults(items){
+  const box=document.getElementById("searchResults");
+  box.innerHTML=items.map((x,i)=>{
+    const kind=x.kind==="trail" ? "Trail" : (x.typeLabel||"Ort");
+    return `<button data-i="${i}"><strong>${escapeHtml(x.name)}</strong><br><span class="small">${escapeHtml(kind)}</span></button>`;
+  }).join("");
+  box.style.display=items.length?"block":"none";
+  [...box.querySelectorAll("button")].forEach((b,i)=>b.onclick=()=>{
+    const x=items[i];
+    if(x.kind==="trail"){
+      map.fitBounds(x.layer.getBounds(),{maxZoom:17,padding:[40,40]});
+      x.layer.fire("click");
+    }else{
+      closeSheet();
+      if(x.boundingbox && x.boundingbox.length===4){
+        map.fitBounds([[+x.boundingbox[0],+x.boundingbox[2]],[+x.boundingbox[1],+x.boundingbox[3]]],{padding:[35,35]});
+      }else{
+        map.setView([+x.lat,+x.lon],15);
+      }
+      if(placeMarker) map.removeLayer(placeMarker);
+      placeMarker=L.marker([+x.lat,+x.lon]).addTo(map).bindPopup(escapeHtml(x.name)).openPopup();
     }
+    box.style.display="none";
+  });
+}
 
-    document.getElementById('locateBtn').addEventListener('click', () => locate({ silent: false }));
+async function searchPlaces(q){
+  const bounds=map.getBounds();
+  const viewbox=[bounds.getWest(),bounds.getNorth(),bounds.getEast(),bounds.getSouth()].join(",");
+  const url="https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&accept-language=de&q="
+    +encodeURIComponent(q)+"&viewbox="+encodeURIComponent(viewbox);
+  const r=await fetch(url,{headers:{"Accept":"application/json"}});
+  if(!r.ok) return [];
+  const results=await r.json();
+  return results.map(x=>({
+    kind:"place",
+    name:x.display_name,
+    lat:x.lat,
+    lon:x.lon,
+    boundingbox:x.boundingbox,
+    typeLabel:{
+      city:"Gemeinde/Stadt",town:"Gemeinde/Stadt",village:"Gemeinde/Dorf",
+      municipality:"Gemeinde",administrative:"Gemeinde/Gebiet",
+      locality:"Flurname",hamlet:"Weiler/Flurname",
+      peak:"Gipfel",mountain_pass:"Pass"
+    }[x.type] || x.type || "Ort"
+  }));
+}
 
-    const pattern = /mtb|trail|gutschwald|route/i;
-    const demoTrails = [
-      { lat: 47.05012, lng: 8.29021, name: 'Demo-Trail 1' },
-      { lat: 47.0494, lng: 8.2912, name: 'Demo-Trail 2' },
-      { lat: 47.0511, lng: 8.2865, name: 'Demo-Trail 3' }
-    ];
-    const trailLayer = L.layerGroup();
-    demoTrails.forEach((trail) => {
-      L.polyline([
-        [trail.lat - 0.0012, trail.lng - 0.0018],
-        [trail.lat + 0.0015, trail.lng + 0.0022],
-        [trail.lat + 0.0030, trail.lng - 0.0006]
-      ], {
-        color: '#2563eb',
-        weight: 4,
-        opacity: 0.95,
-        smoothFactor: 1.5
-      }).addTo(map);
+document.getElementById("searchInput").addEventListener("input",e=>{
+  clearTimeout(searchTimer);
+  const q=e.target.value.trim().toLowerCase();
+  const box=document.getElementById("searchResults");
+  if(q.length<2){box.style.display="none";return;}
+
+  const trails=searchIndex
+    .filter(x=>x.name.toLowerCase().includes(q) && passesFilter(x.feature.properties||{}))
+    .slice(0,12)
+    .map(x=>({kind:"trail",name:x.name,layer:x.layer,feature:x.feature}));
+
+  showSearchResults(trails);
+
+  if(q.length>=3){
+    searchTimer=setTimeout(async()=>{
+      try{
+        const places=await searchPlaces(q);
+        showSearchResults([...trails,...places].slice(0,20));
+      }catch{
+        showSearchResults(trails);
+      }
+    },650);
+  }
+});
+
+function renderPriority(){
+  const box=document.getElementById("priorityList");
+  box.innerHTML=settings.priority.map((tag,i)=>{
+    const options=['<option value="all">Alle</option>']
+      .concat(TAGS[tag].order.map(v=>`<option value="${v}" ${String(settings.maxByTag[tag])===String(v)?"selected":""}>bis ${TAGS[tag].prefix||""}${v}</option>`))
+      .join("");
+    return `
+    <div class="priority-item" data-tag="${tag}">
+      <input type="checkbox" ${settings.enabled[tag]?"checked":""}>
+      <span>${TAGS[tag].label}<br><span class="small">${tag}</span></span>
+      <select class="level-filter" aria-label="Maximale Schwierigkeit für ${TAGS[tag].label}">${options}</select>
+      <a class="info-link" href="${TAG_DOCS[tag]}" target="_blank" rel="noopener noreferrer" aria-label="Dokumentation zu ${TAGS[tag].label}" title="OSM-Dokumentation öffnen">i</a>
+      <button data-dir="-1" ${i===0?"disabled":""}>↑</button>
+      <button data-dir="1" ${i===settings.priority.length-1?"disabled":""}>↓</button>
+    </div>`;
+  }).join("");
+  box.querySelectorAll(".priority-item").forEach(row=>{
+    const tag=row.dataset.tag;
+    row.querySelector('input').onchange=e=>settings.enabled[tag]=e.target.checked;
+    row.querySelector(".level-filter").onchange=e=>settings.maxByTag[tag]=e.target.value;
+    row.querySelectorAll("button[data-dir]").forEach(btn=>btn.onclick=()=>{
+      const from=settings.priority.indexOf(tag), to=from+Number(btn.dataset.dir);
+      [settings.priority[from],settings.priority[to]]=[settings.priority[to],settings.priority[from]];
+      renderPriority();
     });
+  });
+}
+document.getElementById("settingsBtn").onclick=()=>{
+  renderPriority();
+  document.getElementById("showUnrated").checked=settings.showUnrated;
+  document.getElementById("showRoutes").checked=settings.showRoutes;
+  document.getElementById("showTrailDirection").checked=settings.showTrailDirection;
+  document.getElementById("highContrast").checked=settings.highContrast;
+  document.getElementById("followLocation").checked=settings.followLocation;
+  document.getElementById("themeMode").value=settings.theme||"system";
+  document.getElementById("drawer").classList.add("open");
+};
+document.getElementById("closeSettings").onclick=()=>{
+  settings.showUnrated=document.getElementById("showUnrated").checked;
+  settings.showRoutes=document.getElementById("showRoutes").checked;
+  settings.showTrailDirection=document.getElementById("showTrailDirection").checked;
+  settings.highContrast=document.getElementById("highContrast").checked;
+  settings.followLocation=document.getElementById("followLocation").checked;
+  settings.theme=document.getElementById("themeMode").value;
+  applyTheme(settings.theme);
+  localStorage.setItem("mtbSettings",JSON.stringify(settings));
+  updateLayerStyles();
+  document.getElementById("drawer").classList.remove("open");
+};
+document.getElementById("refreshBtn").onclick=()=>Promise.all([loadData(true),loadMetadata(true)])
+  .then(()=>showNotice("Kartendaten neu geladen"))
+  .catch(e=>showNotice(e.message));
 
-    const legendBody = document.getElementById('legendBody');
-    const legendEntries = [
-      { color: '#2ca25f', label: 'MTB leicht' },
-      { color: '#2b8cbe', label: 'MTB mittel' },
-      { color: '#f59e0b', label: 'MTB anspruchsvoll' },
-      { color: '#ef4444', label: 'MTB schwer' }
-    ];
-    legendEntries.forEach((item) => {
-      const row = document.createElement('div');
-      row.className = 'legend-row';
-      row.innerHTML = `<span class="swatch" style="background:${item.color}"></span><span>${item.label}</span>`;
-      legendBody.appendChild(row);
+document.getElementById("legendHead").onclick=()=>{
+  const l=document.getElementById("legend"); l.classList.toggle("hidden");
+  document.getElementById("legendChevron").textContent=l.classList.contains("hidden")?"▸":"▾";
+};
+document.getElementById("sheet").addEventListener("click",e=>{if(e.target===e.currentTarget)closeSheet()});
+
+document.getElementById("gpxBtn").onclick=()=>document.getElementById("gpxInput").click();
+document.getElementById("gpxInput").onchange=e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const xml=new DOMParser().parseFromString(fr.result,"application/xml");
+      const pts=[...xml.querySelectorAll("trkpt,rtept")].map(n=>[+n.getAttribute("lat"),+n.getAttribute("lon")]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));
+      if(!pts.length) throw new Error();
+      if(gpxLayer) map.removeLayer(gpxLayer);
+      gpxLayer=L.polyline(pts,{color:"#fde047",weight:5}).addTo(map);
+      map.fitBounds(gpxLayer.getBounds(),{padding:[30,30]});
+      showNotice("GPX geladen");
+    }catch{showNotice("GPX konnte nicht gelesen werden");}
+  };
+  fr.readAsText(file);
+};
+
+Promise.all([loadData(),loadMetadata()]).catch(e=>showNotice(e.message,8000));
+
+// Beim Öffnen der App sofort den Standort bestimmen und auf Zoom 16 zentrieren.
+// Die Kompassfreigabe kann auf iPhones weiterhin erst nach einem Antippen
+// des Standortbuttons erteilt werden; die Standortanzeige funktioniert trotzdem.
+setTimeout(()=>locate({silent:true}),350);
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("service-worker.js").then(reg=>{
+    reg.update();
+    reg.addEventListener("updatefound",()=>{
+      const worker=reg.installing;
+      if(!worker) return;
+      worker.addEventListener("statechange",()=>{
+        if(worker.state==="installed" && navigator.serviceWorker.controller){
+          showNotice("Neue App-Version verfügbar. Seite wird aktualisiert.",2500);
+          setTimeout(()=>location.reload(),2600);
+        }
+      });
     });
-
-    document.getElementById('legendHead').addEventListener('click', () => {
-      const legend = document.getElementById('legend');
-      legend.classList.toggle('hidden');
-      document.getElementById('legendChevron').textContent = legend.classList.contains('hidden') ? '▸' : '▾';
-    });
-
-    document.getElementById('refreshBtn').addEventListener('click', () => {
-      showNotice('Kartendaten neu geladen');
-      map.flyTo(GUETSCHWALD, START_ZOOM, { duration: 0.5 });
-    });
-
-    document.getElementById('themeMode').value = settings.theme || 'system';
-    document.getElementById('themeMode').addEventListener('change', (e) => {
-      settings.theme = e.target.value;
-      applyTheme(settings.theme);
-    });
-    document.getElementById('showUnrated').checked = !!settings.showUnrated;
-    document.getElementById('showRoutes').checked = !!settings.showRoutes;
-    document.getElementById('showTrailDirection').checked = !!settings.showTrailDirection;
-    document.getElementById('highContrast').checked = !!settings.highContrast;
-    document.getElementById('followLocation').checked = !!settings.followLocation;
-    document.getElementById('showUnrated').addEventListener('change', (e) => settings.showUnrated = !!e.target.checked);
-    document.getElementById('showRoutes').addEventListener('change', (e) => settings.showRoutes = !!e.target.checked);
-    document.getElementById('showTrailDirection').addEventListener('change', (e) => settings.showTrailDirection = !!e.target.checked);
-    document.getElementById('highContrast').addEventListener('change', (e) => settings.highContrast = !!e.target.checked);
-    document.getElementById('followLocation').addEventListener('change', (e) => settings.followLocation = !!e.target.checked);
-
-    if (!document.getElementById('legend').classList.contains('hidden')) {
-      document.getElementById('legendChevron').textContent = '▾';
-    }
-
-    map.whenReady(() => {
-      showNotice('Karte wiederhergestellt');
-    });
-  </script>
+  }).catch(()=>{});
+}
+</script>
 </body>
 </html>
