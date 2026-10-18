@@ -3,12 +3,12 @@
   "chunk": "03",
   "source_file": "trails-03.geojson",
   "spacing_m": 20.0,
-  "selected": 2748,
-  "already_present": 91,
-  "attempted": 2657,
-  "calculated": 2657,
+  "selected": 2807,
+  "already_present": 2613,
+  "attempted": 194,
+  "calculated": 194,
   "failed": 0,
-  "completed_total": 2748,
-  "stale_removed": 0,
+  "completed_total": 2807,
+  "stale_removed": 12,
   "failures": []
 }
